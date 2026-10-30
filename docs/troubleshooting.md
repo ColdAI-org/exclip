@@ -49,6 +49,20 @@ processes). …
 - **For a single-process trial only**, set `server.allowMemoryStore: true`.
   A restart loses everything, wallet backups included.
 
+### The port can't be used
+
+```text
+[exclip] can't listen on port 8080: another process is using it. Stop that
+process, or set PORT to a free port.
+```
+
+Another server, often an ExClip you started earlier, already listens on
+that port. Find it with `lsof -i :8080`, then stop it, or start this one
+with `PORT` set to a free port. If it says `permission denied` instead,
+the port is probably below 1024, which usually needs extra privileges: use
+a higher port, and let the reverse proxy take 80 and 443
+([run the server](self-hosting.md#4-run-the-server)).
+
 ### A Node.js error
 
 | Error | What to do |
@@ -59,9 +73,6 @@ processes). …
 
 ### It starts, but nothing answers
 
-- **Another process holds the port.** The server doesn't report this yet:
-  it prints its start-up lines, then exits or sits idle without listening.
-  Find the other process with `lsof -i :8080`, or set `PORT`.
 - **`[exclip] warning: server.serveStatic is on but … is missing: run pnpm build`.**
   The server answers the API but has no pages to serve. Run `pnpm build`
   on that machine, or copy both `dist` folders there.
@@ -80,6 +91,7 @@ processes). …
 | `fee-receivers.json: not an address: …`, `"receivers" must be an array` or `duplicate receiver` | Fix `apps/wallet/fee-receivers.json`: an array of addresses, each `0x` and 40 hex digits, each listed once. |
 | `inline <script> in index.html`, `inline style in index.html` or `external URL in index.html` | Someone edited `apps/wallet/index.html`. The wallet's CSP runs no inline code, and its page loads files only from its own origin, so put the code in `apps/wallet/src`. |
 | `index.html has an inline <script>, which the CSP (script-src 'self') blocks`, and the app's other `index.html` checks | The same for `apps/web/index.html`. |
+| `FATAL ERROR: Ineffective mark-compacts near heap limit` … `JavaScript heap out of memory` | The app's build needs about 2.6 GB of heap, and on a machine with less than 16 GB of memory Node allows about 2 GB by default. Run `NODE_OPTIONS=--max-old-space-size=4096 pnpm build`, with about 4 GB of memory free. |
 
 The wallet build also warns about two settings it accepts but that won't
 work as you meant:

@@ -48,7 +48,7 @@ works only in a development build.
 | `apps/wallet` | The passkey wallet popup: plain TypeScript and Vite. `src/sodax` holds its signing policy, price checks and the networks and tokens it knows. `fee-receivers.json` is its fee allow-list |
 | `apps/server` | The server: Express 5. `src/routes` for the API, `src/services` for the SODAX proxy, market data and wallet backups, `migrations` for Postgres |
 | `packages/config` | `exclip.config.ts`: its types, defaults and checks, what each build may see, and both origins' security headers |
-| `packages/clip-wallet-core`, `packages/clip-wallet-vault` | Clip Wallet's packages, vendored under their MIT licence. Fix them upstream, not here |
+| `packages/clip-wallet-core`, `packages/clip-wallet-vault` | Clip Wallet's packages, vendored under the same Apache-2.0 licence. Fix them upstream, not here |
 | `brand` | The brand kit: hand-written SVGs and the review sheet ([brand kit](../brand/README.md)) |
 | `tools` | The scripts behind `pnpm run brand`, `pnpm run screenshots` and `pnpm run docs:links` |
 | `docs` | These pages |
@@ -86,15 +86,15 @@ For one package:
 | `pnpm --filter @exclip/wallet run gen:tokens <file>` | Writes the wallet's token table again ([add a network](#add-a-network)) |
 | `pnpm --filter <package> test` | Runs one package's tests |
 
-CI runs `pnpm install --frozen-lockfile`, then typecheck, lint, test and
-build, on every push to `main` and every pull request.
+CI runs `pnpm install --frozen-lockfile`, then typecheck, lint, the link
+check, test and build, on every push to `main` and every pull request.
 
 ## Tests
 
 | Package | Runner | What the tests cover |
 |---|---|---|
 | `packages/config` | `tsx --test` | Defaults, every check, the environment overrides, what each build may see |
-| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, rate limits, storage and migrations, the wallet's backup API, serving the builds |
+| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, rate limits, storage and migrations, the wallet's backup API, serving the builds, a start on a port that's taken |
 | `apps/web` | `tsx --test` | The build config, the catalogue, formatting, the passkey wallet's trade flow on the app's side, the page's CSP check |
 | `apps/wallet` | `tsx --test` | The signing policy, price checks, the hub account, the message protocol, storage, passkeys, the build config |
 

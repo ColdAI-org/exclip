@@ -2,7 +2,7 @@
   "name": "@clip-wallet/core",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "Clip Wallet's shared contract: networks, assets, the Vault and ChainModule interfaces, DecodedRequest, ClipError",
   "type": "module",
   "main": "./src/index.ts",

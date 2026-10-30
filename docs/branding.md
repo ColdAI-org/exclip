@@ -127,9 +127,9 @@ The app sets the three colours on its root element as `--brand-accent`,
 
 | Colour | Dark theme (the default) | Light theme |
 |---|---|---|
-| `accent` | Primary buttons, the action circles and badges, all with dark text or icons (`#03141C`) on them; input focus borders; the tint behind the selected menu item and banners | The same, except the tint |
+| `accent` | Primary buttons, the action circles and badges, all with dark text or icons (`#03141C`) on them; input focus borders; the tint behind the selected menu item and banners | The same, except the input focus borders and the tint |
 | `accentHover` | Buttons and action circles on hover; links and the selected menu icon; the focus ring | Buttons and action circles on hover |
-| `accentInk` | Not used | Links and the selected menu icon; the focus ring; the tint behind the selected menu item and banners |
+| `accentInk` | Not used | Links and the selected menu icon; the focus ring and input focus borders; the tint behind the selected menu item and banners |
 
 The accent never means up or down. Price moves are green and red, and
 always come with an arrow or a sign.
@@ -163,6 +163,12 @@ In practice, `accent` and `accentHover` must be light and saturated, and
 Links and focus rings also sit on the app's cards and sheets, which are a
 shade lighter than the canvas in the dark theme and a shade darker than
 white in the light theme.
+
+Focus rings and input focus borders need at least 3:1 against what's
+around them (WCAG 2.2 SC 1.4.11). An accent light enough for the dark
+theme falls short of that on white, as ExClip's `#00B4F0` does at 2.39:1,
+so the light theme draws them in `accentInk`, which the 4.5:1 rule above
+already covers.
 
 ## What doesn't change
 

@@ -65,7 +65,7 @@ nobody added to its list.
 <table>
   <tr>
     <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/home-dark-desktop.png"><img alt="Home: top movers, trending and new assets, above the market list with each asset's price, 7-day chart and 24-hour change" src="docs/media/home-light-desktop.png"></picture></td>
-    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/trade-dark-desktop.png"><img alt="The trade sheet: $250 of USDC on Base buys about 0.06457 ETH on Base" src="docs/media/trade-light-desktop.png"></picture></td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/trade-dark-desktop.png"><img alt="The trade sheet: $250 of USDC on Base buys about 0.06457 ETH on Arbitrum" src="docs/media/trade-light-desktop.png"></picture></td>
   </tr>
   <tr>
     <td align="center"><sub>Home: the markets at a glance</sub></td>
@@ -174,8 +174,7 @@ change. Without a database, the server keeps everything in memory.
 ### Develop
 
 ```sh
-pnpm typecheck && pnpm lint && pnpm test && pnpm build   # what CI runs
-pnpm run docs:links                                      # every relative link and image in the Markdown
+pnpm typecheck && pnpm lint && pnpm run docs:links && pnpm test && pnpm build   # what CI runs
 ```
 
 [Development](docs/development.md) covers the repository's layout, the
@@ -200,7 +199,7 @@ value stops the server and the build, with a list of every problem.
 | `brand.logo` | `"/logo.svg"` | A file in `apps/web/public`, or an `https://` URL |
 | `brand.colors.accent` | `#00B4F0` | Buttons, focus borders and links on the dark canvas |
 | `brand.colors.accentHover` | `#38C8FF` | Hover and pressed states |
-| `brand.colors.accentInk` | `#0077B6` | Small text and links on light surfaces |
+| `brand.colors.accentInk` | `#0077B6` | Small text, links and focus borders on light surfaces |
 | `brand.termsUrl` | `null` | Your terms of use, linked from the footer |
 | `brand.privacyUrl` | `null` | Your privacy notice, linked from the footer |
 | `features.trading` | `true` | Build trades. When it's off, prices, quotes and order status keep working |
@@ -457,7 +456,7 @@ This repository is ExClip's first version: swaps only. It doesn't include:
 | App | Market swaps, limit orders, asset and pair pages, and the portfolio. Live networks only: there is no test-network mode |
 | Passkey wallet | Market swaps, sends and receives on 14 EVM networks. No limit orders yet |
 | Server | One Node 24 process, on Postgres and optionally Redis. Serves both builds, or sits behind your own web server or CDN |
-| Tests | 225 passing: 93 in the wallet, 88 in the server, 30 in the app and 14 in the config package. CI runs them on every push to `main` and every pull request |
+| Tests | 226 passing: 93 in the wallet, 89 in the server, 30 in the app and 14 in the config package. CI runs them on every push to `main` and every pull request |
 | Security | No independent audit yet |
 | Releases | No tagged release yet. `main` is version 0.1.0 |
 
@@ -492,8 +491,8 @@ a private key in an issue, a pull request or a test.
 ## Licence and trademarks
 
 ExClip is licensed under the [Apache License 2.0](LICENSE), © 2026 ColdAI
-LLC. The vendored Clip Wallet packages keep the MIT licence they were
-published under. [NOTICE](NOTICE) covers both.
+LLC. The vendored packages in `packages/clip-wallet-*` come from Clip
+Wallet, also under the Apache License 2.0, and [NOTICE](NOTICE) credits it.
 
 "ExClip", "Clip Wallet" and the ExClip logo are trademarks of ColdAI LLC,
 and the Apache License grants no rights to them (section 6). You may say

@@ -45,7 +45,20 @@ if (config.server.serveStatic && !dev) {
   if (missing.length) warnings.push(`server.serveStatic is on but ${missing.join(" and ")} is missing: run pnpm build`);
 }
 
-const server = app.listen(config.server.port, () => {
+/** Why the server can't listen, with the fix for the usual causes. */
+function listenProblem(error: NodeJS.ErrnoException): string {
+  if (error.code === "EADDRINUSE") return "another process is using it. Stop that process, or set PORT to a free port.";
+  if (error.code === "EACCES") return "permission denied. Ports below 1024 usually need extra privileges: set PORT to a higher port.";
+  return error.message;
+}
+
+// Express calls this with the error when listening fails (a port that's taken, say): report it and stop, rather than
+// print the start-up lines of a server that isn't listening.
+const server = app.listen(config.server.port, (error) => {
+  if (error) {
+    console.error(`[exclip] can't listen on port ${config.server.port}: ${listenProblem(error)}`);
+    process.exit(1);
+  }
   for (const note of notes) console.log(`[exclip] ${note}`);
   for (const warning of warnings) console.warn(`[exclip] warning: ${warning}`);
 });

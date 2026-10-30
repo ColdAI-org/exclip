@@ -7,14 +7,30 @@ author of ExClip. It is licensed under the Apache License, Version 2.0
 
 -------------------------------------------------------------------------------
 Clip Wallet
+Copyright (c) 2026 ColdAI
 
-packages/clip-wallet-core and packages/clip-wallet-vault are copies of the
-@clip-wallet/core and @clip-wallet/vault packages from the Clip Wallet
-project (github.com/ColdAI-org/clip-wallet; the commit is recorded in each
-package's UPSTREAM file). They keep the licence they were published under,
-which is included in each package's LICENSE file:
+This product includes software from the Clip Wallet project
+(github.com/ColdAI-org/clip-wallet): packages/clip-wallet-core and
+packages/clip-wallet-vault are copies of its @clip-wallet/core and
+@clip-wallet/vault packages, at the commit recorded in each package's
+UPSTREAM file. Clip Wallet is licensed under the Apache License, Version
+2.0, and each package's LICENSE file holds a copy.
 
-  Copyright (c) 2026 ColdAI
+-------------------------------------------------------------------------------
+Third-party components
+
+1. Inter typeface
+   The wordmark in brand/exclip-wordmark-*.svg and brand/exclip-lockup-*.svg is
+   set in Inter Bold, outlined. Copyright (c) The Inter Project Authors
+   (https://github.com/rsms/inter), SIL Open Font License 1.1.
+
+2. Contributor Covenant
+   CODE_OF_CONDUCT.md is adapted from the Contributor Covenant, version 2.1
+   (https://www.contributor-covenant.org), licensed under CC BY 4.0.
+
+npm dependencies are not vendored; each is distributed under its own licence,
+as listed in its package. Builds of apps/web bundle them, and whoever
+distributes a build must meet those licences.
 
 -------------------------------------------------------------------------------
 Trademarks

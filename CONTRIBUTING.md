@@ -27,6 +27,7 @@ Run what CI runs:
 ```sh
 pnpm typecheck
 pnpm lint
+pnpm run docs:links
 pnpm test
 pnpm build
 ```

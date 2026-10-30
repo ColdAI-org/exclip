@@ -64,6 +64,10 @@ pnpm build
 This writes `apps/web/dist` and `apps/wallet/dist`. Each build takes only
 the public settings it needs from `exclip.config.ts`, and never a credential.
 
+The app's build needs about 4 GB of memory, and more heap than Node allows
+by default on a machine with less than 16 GB. There, build with
+`NODE_OPTIONS=--max-old-space-size=4096 pnpm build`.
+
 - A production wallet build stops if an origin isn't an exact `https`
   origin, or if the app origin shares the wallet's host.
 - It warns while the origins are still the examples, and when a partner fee
@@ -139,7 +143,8 @@ SODAX_API_KEY=… DATABASE_URL=… pnpm start
 2. chooses its storage, and stops if production would run on memory. It
    doesn't connect to Postgres or Redis, or check the migrations, before it
    listens (the [smoke checks](#smoke-checks) cover that);
-3. listens on `server.port` (`PORT`), and logs what it runs with: the
+3. listens on `server.port` (`PORT`), and stops if it can't, say because
+   another process holds the port. Then it logs what it runs with: the
    storage, whether the SODAX key is set, trading on or off, and the fee.
 
 Without a SODAX key the server still starts. It answers `/config` and market
@@ -217,7 +222,7 @@ FROM node:24-slim
 WORKDIR /app
 RUN npm install --global pnpm@12.6.0
 COPY . .
-RUN pnpm install --frozen-lockfile && pnpm build
+RUN pnpm install --frozen-lockfile && NODE_OPTIONS=--max-old-space-size=4096 pnpm build
 USER node
 EXPOSE 8080
 CMD ["node", "apps/server/src/index.ts"]
