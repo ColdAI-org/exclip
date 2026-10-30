@@ -199,7 +199,7 @@ value stops the server and the build, with a list of every problem.
 | `brand.logo` | `"/logo.svg"` | A file in `apps/web/public`, or an `https://` URL |
 | `brand.colors.accent` | `#00B4F0` | Buttons, focus borders and links on the dark canvas |
 | `brand.colors.accentHover` | `#38C8FF` | Hover and pressed states |
-| `brand.colors.accentInk` | `#0077B6` | Small text and links on light surfaces |
+| `brand.colors.accentInk` | `#0077B6` | Small text, links and focus borders on light surfaces |
 | `brand.termsUrl` | `null` | Your terms of use, linked from the footer |
 | `brand.privacyUrl` | `null` | Your privacy notice, linked from the footer |
 | `features.trading` | `true` | Build trades. When it's off, prices, quotes and order status keep working |
