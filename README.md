@@ -457,7 +457,7 @@ This repository is ExClip's first version: swaps only. It doesn't include:
 | App | Market swaps, limit orders, asset and pair pages, and the portfolio. Live networks only: there is no test-network mode |
 | Passkey wallet | Market swaps, sends and receives on 14 EVM networks. No limit orders yet |
 | Server | One Node 24 process, on Postgres and optionally Redis. Serves both builds, or sits behind your own web server or CDN |
-| Tests | 225 passing: 93 in the wallet, 88 in the server, 30 in the app and 14 in the config package. CI runs them on every push to `main` and every pull request |
+| Tests | 226 passing: 93 in the wallet, 89 in the server, 30 in the app and 14 in the config package. CI runs them on every push to `main` and every pull request |
 | Security | No independent audit yet |
 | Releases | No tagged release yet. `main` is version 0.1.0 |
 

@@ -94,7 +94,7 @@ build, on every push to `main` and every pull request.
 | Package | Runner | What the tests cover |
 |---|---|---|
 | `packages/config` | `tsx --test` | Defaults, every check, the environment overrides, what each build may see |
-| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, rate limits, storage and migrations, the wallet's backup API, serving the builds |
+| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, rate limits, storage and migrations, the wallet's backup API, serving the builds, a start on a port that's taken |
 | `apps/web` | `tsx --test` | The build config, the catalogue, formatting, the passkey wallet's trade flow on the app's side, the page's CSP check |
 | `apps/wallet` | `tsx --test` | The signing policy, price checks, the hub account, the message protocol, storage, passkeys, the build config |
 

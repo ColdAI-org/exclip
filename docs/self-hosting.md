@@ -143,7 +143,8 @@ SODAX_API_KEY=… DATABASE_URL=… pnpm start
 2. chooses its storage, and stops if production would run on memory. It
    doesn't connect to Postgres or Redis, or check the migrations, before it
    listens (the [smoke checks](#smoke-checks) cover that);
-3. listens on `server.port` (`PORT`), and logs what it runs with: the
+3. listens on `server.port` (`PORT`), and stops if it can't, say because
+   another process holds the port. Then it logs what it runs with: the
    storage, whether the SODAX key is set, trading on or off, and the fee.
 
 Without a SODAX key the server still starts. It answers `/config` and market
