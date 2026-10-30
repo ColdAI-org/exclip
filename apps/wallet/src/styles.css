@@ -1,0 +1,149 @@
+/* ExClip wallet popup. Mobile first (375px), system fonts, no external resources (CSP: style-src 'self'). */
+:root {
+  --bg: #ffffff;
+  --fg: #0f1115;
+  --muted: #5b6270;
+  --line: #e3e6ec;
+  --panel: #f6f7f9;
+  --accent: #1f5eff;
+  --accent-fg: #ffffff;
+  --warn-bg: #fff6e0;
+  --warn-fg: #6b4b00;
+  --err-bg: #ffecec;
+  --err-fg: #8a1414;
+  --danger: #b42318;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --fg: #eef0f4;
+    --muted: #a3aab8;
+    --line: #2a2f3a;
+    --panel: #171a21;
+    --accent: #5b8cff;
+    --accent-fg: #0b0d12;
+    --warn-bg: #3a2e0c;
+    --warn-fg: #ffdf8f;
+    --err-bg: #3d1414;
+    --err-fg: #ffb4b4;
+    --danger: #ff8a80;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); }
+body {
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+main {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 20px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100vh;
+}
+h1 { font-size: 20px; line-height: 1.25; margin: 0; outline: none; }
+p { margin: 0; }
+.head { display: flex; flex-direction: column; gap: 2px; }
+.sub { color: var(--muted); font-size: 14px; }
+.note { color: var(--muted); font-size: 13px; }
+.status { color: var(--muted); font-size: 13px; min-height: 1.2em; }
+.status:empty { display: none; }
+.warning { background: var(--warn-bg); color: var(--warn-fg); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.warnings { display: flex; flex-direction: column; gap: 8px; }
+.error { background: var(--err-bg); color: var(--err-fg); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.error[hidden] { display: none; }
+
+.review {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.review dt { padding: 10px 12px 0; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.review dd { margin: 0; padding: 2px 12px 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; font-weight: 600; }
+.review dd:last-child { border-bottom: 0; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 500; }
+.txs ol { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+
+/* Price alarm: full screen, red in both colour schemes. */
+.alarm {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: #b42318;
+  color: #ffffff;
+  padding: 28px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.alarm h1 { font-size: 22px; }
+.alarm .primary { background: #ffffff; color: #8a1414; }
+.alarm .danger { color: #ffffff; border-color: rgba(255, 255, 255, 0.6); }
+
+/* Receive: the QR code stays dark on white in both colour schemes (scanners expect it). */
+.qr { display: block; align-self: center; width: min(240px, 70vw); height: auto; border-radius: 8px; }
+.address {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.address span { display: inline-block; }
+.address span + span { margin-left: 0.4em; }
+
+.rules { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.words {
+  margin: 0;
+  padding: 12px 12px 12px 36px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  background: var(--panel);
+  border-radius: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 15px;
+  /* Discourages copy and paste. It is not a security boundary: the phrase is meant for paper. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+.check { display: flex; flex-direction: column; gap: 10px; }
+.check label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.check input {
+  font: inherit;
+  font-size: 16px; /* no iOS zoom on focus */
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.actions { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.btn {
+  font: inherit;
+  font-weight: 600;
+  min-height: 48px;
+  border-radius: 12px;
+  padding: 12px 16px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  width: 100%;
+}
+.btn:disabled { opacity: 0.55; cursor: progress; }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.primary { background: var(--accent); color: var(--accent-fg); }
+.secondary { background: transparent; color: var(--fg); border-color: var(--line); }
+.danger { background: transparent; color: var(--danger); border-color: var(--line); }
+.foot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); }
+.foot p { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }

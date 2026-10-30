@@ -35,7 +35,8 @@ export const WALLET_PERMISSIONS_POLICY = [
 
 const HSTS = "max-age=63072000; includeSubDomains";
 
-/** Every response from the wallet origin. `secure`: served over https (adds HSTS). */
+/** Every response from the wallet origin. `secure`: served over https (adds HSTS). no-store: no browser or cache in
+ * between keeps an older wallet build, so a fixed one is what runs the next time the popup opens. */
 export function walletSecurityHeaders(secure: boolean): Record<string, string> {
   return {
     "content-security-policy": WALLET_CSP,
@@ -46,6 +47,7 @@ export function walletSecurityHeaders(secure: boolean): Record<string, string> {
     "permissions-policy": WALLET_PERMISSIONS_POLICY,
     "x-content-type-options": "nosniff",
     "x-robots-tag": "noindex, nofollow",
+    "cache-control": "no-store",
     ...(secure ? { "strict-transport-security": HSTS } : {}),
   };
 }
