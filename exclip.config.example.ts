@@ -54,8 +54,8 @@ export default {
   },
 
   wallet: {
-    // Until a passkey wallet is backed up (recovery phrase saved, or a second passkey added), deposits worth more than
-    // this many US dollars are refused.
+    // Until a passkey wallet is backed up (recovery phrase saved, or a second passkey added), the app shows a backup
+    // banner with this limit in US dollars, and the wallet hides its deposit address once it holds this much.
     unbackedLimitUsd: 100,
     // Encrypted backup versions kept per passkey.
     maxBackupVersions: 50,
