@@ -1,0 +1,485 @@
+/*
+ * ExClip. Every rule is scoped under .exclip (the app root and each sheet's portal root), so nothing leaks out of the
+ * app. Dark by default; [data-theme="light"] switches the tokens. The accent is the brand and action colour
+ * (brand.colors in exclip.config.ts, which src/lib/brand.ts sets as the --brand-* properties) and never means "up":
+ * price direction is green/red and always comes with an arrow or a sign.
+ */
+
+/* The page around the app root: no margin, and the canvas colour behind it (first paint, overscroll). */
+html { background: #07080a; color-scheme: dark; }
+html:has(.exclip.x-app[data-theme="light"]) { background: #f6f7f9; color-scheme: light; }
+body { margin: 0; }
+
+.exclip {
+  --x-canvas: #07080a;
+  --x-surface: #0e1014;
+  --x-surface-2: #15181e;
+  --x-surface-3: #1c2028;
+  --x-line: rgb(255 255 255 / 0.08);
+  --x-line-strong: rgb(255 255 255 / 0.14);
+  --x-text: #f5f5f7;
+  --x-text-2: #a1a1aa;
+  --x-text-3: #71717a;
+  --x-accent: var(--brand-accent, #00b4f0);
+  --x-accent-hi: var(--brand-accent-hover, #38c8ff);
+  --x-accent-text: var(--brand-accent-hover, #38c8ff);
+  --x-on-accent: #03141c;
+  --x-accent-soft: color-mix(in srgb, var(--brand-accent, #00b4f0) 12%, transparent);
+  --x-up: #22c55e;
+  --x-down: #f2545b;
+  --x-warn: #f5a524;
+  --x-warn-soft: rgb(245 165 36 / 0.12);
+  --x-focus: var(--brand-accent-hover, #38c8ff);
+  --x-skel: rgb(255 255 255 / 0.06);
+  --x-skel-hi: rgb(255 255 255 / 0.11);
+  --x-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+  --x-radius: 16px;
+  --x-rail: 232px;
+  --x-tabbar: 64px;
+  --x-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  color-scheme: dark;
+  font-family: var(--x-font);
+  color: var(--x-text);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.exclip[data-theme="light"] {
+  --x-canvas: #f6f7f9;
+  --x-surface: #ffffff;
+  --x-surface-2: #f1f3f6;
+  --x-surface-3: #e7eaef;
+  --x-line: rgb(9 11 15 / 0.08);
+  --x-line-strong: rgb(9 11 15 / 0.16);
+  --x-text: #0b0c0e;
+  --x-text-2: #52525b;
+  --x-text-3: #71717a;
+  --x-accent-text: var(--brand-accent-ink, #0077b6);
+  --x-accent-soft: color-mix(in srgb, var(--brand-accent-ink, #0077b6) 8%, transparent);
+  --x-up: #15803d;
+  --x-down: #dc2626;
+  --x-warn: #b45309;
+  --x-warn-soft: rgb(180 83 9 / 0.08);
+  --x-focus: var(--brand-accent-ink, #0077b6);
+  --x-skel: rgb(9 11 15 / 0.06);
+  --x-skel-hi: rgb(9 11 15 / 0.1);
+  --x-shadow: 0 24px 64px rgb(9 11 15 / 0.18);
+  color-scheme: light;
+}
+
+.exclip *, .exclip *::before, .exclip *::after { box-sizing: border-box; }
+.exclip :where(h1, h2, h3, p, ul, ol, dl, dd, figure) { margin: 0; }
+.exclip :where(ul, ol) { list-style: none; padding: 0; }
+.exclip a { color: inherit; text-decoration: none; }
+.exclip button { font: inherit; color: inherit; cursor: pointer; }
+.exclip button:disabled { cursor: not-allowed; }
+.exclip :focus-visible { outline: 2px solid var(--x-focus); outline-offset: 2px; border-radius: 8px; }
+.exclip .x-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.exclip .x-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.exclip .x-muted { color: var(--x-text-2); }
+.exclip .x-small { font-size: 13px; }
+.exclip .x-fine { font-size: 12px; color: var(--x-text-3); line-height: 1.5; }
+.exclip .x-strong { font-weight: 600; }
+.exclip .x-lg { font-size: 20px; }
+.exclip .x-center { text-align: center; }
+.exclip .x-right { text-align: right; }
+.exclip .x-pad { padding: 16px; }
+.exclip .x-pad-b { padding-bottom: 12px; }
+.exclip .x-up { color: var(--x-up); }
+.exclip .x-down { color: var(--x-down); }
+.exclip .x-flat { color: var(--x-text-2); }
+.exclip .x-warn-text { color: var(--x-warn); }
+.exclip .x-link { color: var(--x-accent-text); display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
+.exclip .x-link:hover { text-decoration: underline; }
+.exclip .x-link-btn { background: none; border: 0; padding: 0; color: var(--x-accent-text); font-weight: 500; }
+.exclip .x-h1 { font-size: 28px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; }
+.exclip .x-h2 { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+.exclip .x-h3 { font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 6px; }
+.exclip .x-prose { color: var(--x-text-2); max-width: 68ch; margin-bottom: 16px; }
+.exclip .x-stack { display: flex; flex-direction: column; gap: 14px; }
+.exclip .x-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
+.exclip .x-rot { transform: rotate(180deg); }
+.exclip .x-kbd { font: 500 11px/1 var(--x-font); padding: 4px 6px; border-radius: 6px; border: 1px solid var(--x-line-strong); color: var(--x-text-3); }
+
+/* ---------- App frame ---------- */
+.exclip.x-app { min-height: 100vh; min-height: 100dvh; background: var(--x-canvas); display: grid; grid-template-columns: var(--x-rail) minmax(0, 1fr); }
+.exclip .x-skip { position: absolute; left: 12px; top: -48px; z-index: 100; padding: 10px 14px; border-radius: 10px; background: var(--x-accent); color: var(--x-on-accent); font-weight: 600; }
+.exclip .x-skip:focus { top: 12px; }
+
+.exclip .x-rail { position: sticky; top: 0; height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: 24px; padding: 20px 14px; border-right: 1px solid var(--x-line); background: var(--x-canvas); }
+.exclip .x-brand { display: inline-flex; align-items: center; gap: 10px; padding: 4px 8px; font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+/* brand.name is up to 40 characters: a long one wraps instead of overflowing the rail. */
+.exclip .x-wordmark { min-width: 0; overflow-wrap: anywhere; }
+.exclip .x-mark { display: block; flex: none; }
+.exclip .x-rail-nav { display: flex; flex-direction: column; gap: 2px; }
+.exclip .x-rail-link { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px; color: var(--x-text-2); font-weight: 550; transition: background-color .15s, color .15s; }
+.exclip .x-rail-link:hover { background: var(--x-surface-2); color: var(--x-text); }
+.exclip .x-rail-link.is-on { background: var(--x-accent-soft); color: var(--x-text); }
+.exclip .x-rail-link.is-on svg { color: var(--x-accent-text); }
+.exclip .x-rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+
+.exclip .x-main-col { min-width: 0; display: flex; flex-direction: column; }
+.exclip .x-top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 12px 32px; background: color-mix(in srgb, var(--x-canvas) 86%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--x-line); }
+.exclip .x-brand-top { display: none; }
+.exclip .x-searchbtn { flex: 1; max-width: 420px; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--x-line); background: var(--x-surface); color: var(--x-text-3); text-align: left; }
+.exclip .x-searchbtn:hover { border-color: var(--x-line-strong); }
+.exclip .x-searchbtn-label { flex: 1; }
+.exclip .x-top-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.exclip .x-main { flex: 1; width: 100%; max-width: 1240px; margin: 0 auto; padding: 28px 32px 64px; outline: none; }
+.exclip .x-tabbar { display: none; }
+/* Who runs the deployment and its legal links: under the content, aligned with it. */
+.exclip .x-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; width: calc(100% - 64px); max-width: 1176px; margin: 0 auto; padding: 20px 0 28px; border-top: 1px solid var(--x-line); }
+.exclip .x-footer-links { display: flex; gap: 16px; }
+
+/* ---------- Buttons ---------- */
+.exclip .x-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px; border: 1px solid transparent; font-weight: 600; font-size: 15px; white-space: nowrap; transition: background-color .15s, border-color .15s, opacity .15s; }
+.exclip .x-btn-primary { background: var(--x-accent); color: var(--x-on-accent); }
+.exclip .x-btn-primary:hover:not(:disabled) { background: var(--x-accent-hi); }
+.exclip .x-btn-ghost { background: var(--x-surface-2); color: var(--x-text); border-color: var(--x-line); }
+.exclip .x-btn-ghost:hover:not(:disabled) { background: var(--x-surface-3); }
+.exclip .x-btn-sell { background: var(--x-text); color: var(--x-canvas); }
+.exclip .x-btn:disabled { opacity: .45; }
+.exclip .x-btn-block { width: 100%; }
+.exclip .x-btn-lg { height: 52px; font-size: 16px; }
+.exclip .x-btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.exclip .x-icon-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: 999px; border: 0; background: transparent; color: var(--x-text-2); }
+.exclip .x-icon-btn:hover { background: var(--x-surface-2); color: var(--x-text); }
+.exclip .x-icon-btn-sm { width: 28px; height: 28px; }
+.exclip .x-addr { gap: 8px; }
+.exclip .x-dot-live { width: 8px; height: 8px; border-radius: 50%; background: var(--x-up); }
+.exclip .x-spin { animation: x-spin 1s linear infinite; }
+@keyframes x-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Cards, lists, rows ---------- */
+.exclip .x-page { display: flex; flex-direction: column; gap: 20px; }
+.exclip .x-page-head { display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+.exclip .x-page-head-row { max-width: none; flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.exclip .x-card { background: var(--x-surface); border: 1px solid var(--x-line); border-radius: var(--x-radius); padding: 20px; min-width: 0; }
+.exclip .x-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.exclip .x-card > .x-h2 { margin-bottom: 12px; }
+.exclip .x-card > .x-h3 { margin: 4px 0 10px; }
+.exclip .x-list { display: flex; flex-direction: column; }
+.exclip .x-row { display: flex; align-items: center; gap: 12px; padding: 10px 8px; min-height: 56px; border-radius: 12px; width: 100%; background: none; border: 0; text-align: left; }
+.exclip .x-row-tight { min-height: 44px; padding: 6px 8px; }
+.exclip .x-row-stack { flex-direction: column; align-items: stretch; gap: 4px; }
+.exclip .x-row-btn { cursor: pointer; transition: background-color .12s; }
+.exclip .x-row-btn:hover:not(:disabled), .exclip .x-row-btn.is-active { background: var(--x-surface-2); }
+.exclip .x-row-btn:disabled { opacity: .4; }
+.exclip .x-row-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.exclip .x-row-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exclip .x-row-sub { font-size: 13px; color: var(--x-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exclip .x-row-end { display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 2px; flex: none; }
+.exclip .x-row-actions { display: flex; gap: 8px; padding: 4px 8px 8px; }
+.exclip .x-net-strip { display: flex; align-items: center; gap: 4px; }
+.exclip .x-status-line { padding: 8px; color: var(--x-text-2); display: flex; align-items: center; gap: 8px; }
+.exclip .x-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: 999px; background: var(--x-accent); color: var(--x-on-accent); font-size: 11px; font-weight: 700; }
+.exclip .x-banner { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--x-accent-soft); color: var(--x-text); font-size: 14px; }
+.exclip .x-banner-warn { background: var(--x-warn-soft); color: var(--x-text); box-shadow: inset 3px 0 0 var(--x-warn); }
+.exclip .x-main-col > .x-banner { margin: 12px 32px 0; }
+.exclip .x-banner-action { flex-wrap: wrap; justify-content: space-between; }
+.exclip .x-banner-action > p { margin: 0; flex: 1 1 220px; }
+.exclip .x-banner-action > .x-btn { flex: 0 0 auto; }
+.exclip .x-alert { color: var(--x-down); }
+
+/* Icons */
+.exclip .x-asset-ico { position: relative; display: inline-grid; place-items: center; flex: none; border-radius: 50%; font-weight: 700; letter-spacing: -0.02em; color: hsl(var(--x-ico-h) var(--x-ico-s) 82%); background: radial-gradient(120% 120% at 30% 20%, hsl(var(--x-ico-h) var(--x-ico-s) 36%), hsl(var(--x-ico-h) var(--x-ico-s) 18%)); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1); }
+.exclip[data-theme="light"] .x-asset-ico { color: hsl(var(--x-ico-h) var(--x-ico-s) 26%); background: radial-gradient(120% 120% at 30% 20%, hsl(var(--x-ico-h) var(--x-ico-s) 92%), hsl(var(--x-ico-h) var(--x-ico-s) 82%)); box-shadow: inset 0 0 0 1px rgb(9 11 15 / 0.08); }
+.exclip .x-asset-ico-net { position: absolute; right: -3px; bottom: -3px; box-shadow: 0 0 0 2px var(--x-surface); }
+.exclip .x-net-ico { display: inline-block; flex: none; aspect-ratio: 1; border-radius: 50%; background-color: #15161a; background-repeat: no-repeat; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14); vertical-align: middle; }
+.exclip .x-net-mono { display: inline-grid; place-items: center; font-weight: 700; line-height: 1; color: #fff; background: hsl(var(--x-ico-h) 55% 38%); }
+
+/* Change, sparkline, skeleton */
+.exclip .x-change { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; font-size: 14px; white-space: nowrap; }
+.exclip .x-spark { display: block; }
+.exclip .x-spark path { stroke: var(--x-text-2); }
+.exclip .x-spark.x-up path { stroke: var(--x-up); }
+.exclip .x-spark.x-down path { stroke: var(--x-down); }
+.exclip .x-spark-empty { display: block; }
+.exclip .x-skel { display: block; background: linear-gradient(90deg, var(--x-skel) 0%, var(--x-skel-hi) 50%, var(--x-skel) 100%) 0 0 / 200% 100%; animation: x-shimmer 1.4s ease-in-out infinite; border-radius: 6px; min-height: 1em; }
+@keyframes x-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* Empty state */
+.exclip .x-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px 16px; text-align: center; }
+.exclip .x-empty-ico { color: var(--x-text-3); }
+.exclip .x-empty-title { font-weight: 650; font-size: 16px; }
+.exclip .x-empty-body { color: var(--x-text-2); max-width: 48ch; }
+.exclip .x-empty-action { margin-top: 8px; }
+
+/* Pills and tabs */
+.exclip .x-pills { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--x-surface-2); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.exclip .x-pill { border: 0; background: transparent; color: var(--x-text-2); font-weight: 600; font-size: 14px; height: 32px; padding: 0 14px; border-radius: 999px; white-space: nowrap; }
+.exclip .x-pills-sm .x-pill { height: 28px; padding: 0 11px; font-size: 13px; }
+.exclip .x-pill:hover { color: var(--x-text); }
+.exclip .x-pill.is-on { background: var(--x-surface); color: var(--x-text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), inset 0 0 0 1px var(--x-line); }
+.exclip .x-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--x-line); margin-bottom: 16px; }
+.exclip .x-tab { position: relative; display: inline-flex; align-items: center; border: 0; background: none; padding: 10px 14px; font-weight: 600; color: var(--x-text-2); }
+.exclip .x-tab:hover { color: var(--x-text); }
+.exclip .x-tab.is-on { color: var(--x-text); }
+.exclip .x-tab.is-on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--x-accent); }
+
+/* Tables */
+.exclip .x-table-wrap { overflow-x: auto; }
+.exclip .x-table { width: 100%; border-collapse: collapse; }
+.exclip .x-table th, .exclip .x-table td { padding: 10px 8px; border-bottom: 1px solid var(--x-line); vertical-align: middle; font-weight: inherit; text-align: left; }
+.exclip .x-table thead th { font-size: 12px; font-weight: 600; color: var(--x-text-3); text-transform: uppercase; letter-spacing: .04em; padding-top: 4px; }
+.exclip .x-table th.x-right, .exclip .x-table td.x-right { text-align: right; }
+.exclip .x-table tbody tr:last-child > * { border-bottom: 0; }
+.exclip .x-table-compact th, .exclip .x-table-compact td { padding: 8px 6px; font-size: 14px; }
+.exclip .x-tr-link { cursor: pointer; }
+.exclip .x-tr-link:hover { background: var(--x-surface-2); }
+.exclip .x-asset-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.exclip .x-legs-row > td { padding: 0 0 8px; background: var(--x-surface-2); }
+.exclip .x-legs-list { padding: 6px 8px 0; }
+
+/* Stats */
+.exclip .x-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 20px; }
+.exclip .x-stats > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.exclip .x-stats dd { font-size: 16px; font-weight: 600; }
+.exclip .x-chips-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.exclip .x-net-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 8px; border-radius: 999px; background: var(--x-surface-2); border: 1px solid var(--x-line); font-size: 13px; font-weight: 550; }
+
+/* Forms */
+.exclip .x-field { display: flex; flex-direction: column; gap: 6px; }
+.exclip .x-field-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.exclip .x-input { width: 100%; height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--x-line-strong); background: var(--x-surface-2); color: var(--x-text); font: inherit; font-size: 16px; }
+.exclip .x-input:focus { outline: none; border-color: var(--x-accent); box-shadow: 0 0 0 3px var(--x-accent-soft); }
+.exclip .x-input[aria-invalid="true"] { border-color: var(--x-down); }
+.exclip .x-input-sm { height: 34px; width: auto; font-size: 14px; padding: 0 10px; }
+.exclip .x-input-group { display: flex; gap: 8px; align-items: center; }
+.exclip select.x-input { appearance: auto; }
+.exclip .x-details { border-top: 1px solid var(--x-line); padding-top: 12px; }
+.exclip .x-details summary { cursor: pointer; font-weight: 550; color: var(--x-text-2); display: flex; align-items: center; gap: 6px; }
+.exclip .x-details[open] summary { margin-bottom: 10px; }
+.exclip .x-chips { display: flex; justify-content: center; gap: 8px; }
+.exclip .x-chip { height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--x-line-strong); background: transparent; font-weight: 600; font-size: 13px; color: var(--x-text); }
+.exclip .x-chip:hover:not(:disabled) { background: var(--x-surface-2); }
+.exclip .x-chip:disabled { opacity: .4; }
+.exclip .x-search-field { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; border-radius: 12px; background: var(--x-surface-2); border: 1px solid var(--x-line); color: var(--x-text-3); margin-bottom: 8px; }
+.exclip .x-search-field:focus-within { border-color: var(--x-accent); }
+.exclip .x-search-field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--x-text); font: inherit; font-size: 16px; outline: none; }
+.exclip .x-search-list, .exclip .x-picker-list { max-height: min(60vh, 520px); overflow-y: auto; }
+
+/* ---------- Home ---------- */
+.exclip .x-home-top { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.exclip .x-home-top > :only-child { grid-column: 1 / -1; }
+.exclip .x-card-hero { display: flex; flex-direction: column; gap: 20px; }
+.exclip .x-hero { display: flex; flex-direction: column; gap: 8px; }
+.exclip .x-hero-connect { gap: 14px; padding: 12px 4px; }
+.exclip .x-hero-connect .x-h1 { font-size: 32px; max-width: 20ch; }
+.exclip .x-hero-connect .x-muted { max-width: 56ch; }
+.exclip .x-hero-ctas { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.exclip .x-balance, .exclip .x-price { font-size: 40px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; }
+.exclip .x-hero-change { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-weight: 600; min-height: 22px; margin-bottom: 8px; }
+.exclip .x-actions { display: flex; justify-content: space-between; gap: 8px; max-width: 460px; }
+.exclip .x-action { display: flex; flex-direction: column; align-items: center; gap: 8px; border: 0; background: none; padding: 0; min-width: 56px; }
+.exclip .x-action-circle { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--x-accent); color: var(--x-on-accent); transition: background-color .15s, transform .15s; }
+.exclip .x-action:hover .x-action-circle { background: var(--x-accent-hi); }
+.exclip .x-action:active .x-action-circle { transform: scale(.96); }
+.exclip .x-action-label { font-size: 13px; font-weight: 600; }
+.exclip .x-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.exclip .x-mini { padding: 16px; container-type: inline-size; }
+/* Price and change stacked on the right, so a narrow card never cuts the price off. */
+.exclip .x-mini-quote { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; font-size: 14px; white-space: nowrap; }
+.exclip .x-mini-quote .x-change { font-size: 12px; }
+.exclip .x-mini .x-row-tight { gap: 8px; padding-inline: 4px; }
+.exclip .x-mini .x-row-main { flex: 1 0 auto; }
+/* In the narrowest cards the decorative icon gives its width to the price. */
+@container (max-width: 210px) { .exclip .x-mini .x-asset-ico { display: none; } }
+
+/* ---------- Chart ---------- */
+.exclip .x-chart { position: relative; width: 100%; touch-action: pan-y; cursor: crosshair; outline-offset: 4px; }
+.exclip .x-chart svg { display: block; overflow: visible; }
+.exclip .x-chart-line { stroke: var(--x-text); stroke-width: 2; opacity: .92; }
+.exclip .x-fill-up { stop-color: var(--x-up); }
+.exclip .x-fill-down { stop-color: var(--x-down); }
+.exclip .x-chart-cross { stroke: var(--x-text-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.exclip .x-chart-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--x-text); box-shadow: 0 0 0 3px var(--x-surface); transform: translate(-50%, -50%); pointer-events: none; }
+.exclip .x-chart-time { position: absolute; top: -2px; transform: translate(-50%, -100%); font-size: 12px; color: var(--x-text-2); white-space: nowrap; pointer-events: none; }
+.exclip .x-chart-empty { position: absolute; inset: 0; display: grid; place-items: center; }
+.exclip .x-chart-skel { width: 100%; height: 100%; border-radius: 12px; }
+.exclip .x-chart.is-loading svg { opacity: .5; }
+.exclip .x-chart-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+
+/* Donut */
+.exclip .x-donut { position: relative; flex: none; }
+.exclip .x-donut svg { transform: rotate(0deg); }
+.exclip .x-donut-track { stroke: var(--x-surface-2); }
+.exclip .x-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.exclip .x-alloc-body { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin-bottom: 20px; }
+.exclip .x-legend { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 140px; }
+.exclip .x-legend li { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 10px; font-size: 14px; }
+.exclip .x-legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+.exclip .x-portfolio-grid { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.exclip .x-alloc .x-stats { grid-template-columns: 1fr 1fr; }
+
+/* ---------- Asset page ---------- */
+.exclip .x-back { display: inline-flex; align-items: center; gap: 6px; color: var(--x-text-2); font-weight: 550; align-self: flex-start; }
+.exclip .x-back:hover { color: var(--x-text); }
+.exclip .x-asset-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.exclip .x-asset-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.exclip .x-asset-head { display: flex; align-items: center; gap: 14px; }
+.exclip .x-asset-ticker { font-size: 18px; font-weight: 600; }
+.exclip .x-asset-side { position: sticky; top: 88px; }
+.exclip .x-trade-card { display: flex; flex-direction: column; gap: 10px; }
+.exclip .x-sticky-bar { display: none; }
+
+/* ---------- Advanced ---------- */
+.exclip .x-pair-head { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+.exclip .x-pair-id { display: flex; align-items: center; gap: 12px; }
+.exclip .x-pair-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+.exclip .x-pair-stats > div { display: flex; flex-direction: column; }
+.exclip .x-adv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "chart side" "orders side"; gap: 20px; align-items: start; }
+.exclip .x-adv-chart { grid-area: chart; }
+.exclip .x-adv-side { grid-area: side; display: flex; flex-direction: column; gap: 20px; }
+.exclip .x-adv-orders { grid-area: orders; min-width: 0; }
+.exclip .x-order .x-tabs { margin-bottom: 14px; }
+.exclip .x-order .x-tab { flex: 1; justify-content: center; }
+
+/* ---------- Definition lists (review, order panel) ---------- */
+.exclip .x-dl { display: flex; flex-direction: column; border-top: 1px solid var(--x-line); }
+.exclip .x-dl-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--x-line); font-size: 14px; }
+.exclip .x-dl-row dt { color: var(--x-text-2); flex: none; max-width: 50%; }
+.exclip .x-dl-row dd { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.exclip .x-dl-tight .x-dl-row { padding: 7px 0; }
+.exclip .x-route { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- Sheets ---------- */
+.exclip.x-portal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.exclip .x-backdrop { position: absolute; inset: 0; background: rgb(0 0 0 / 0.6); animation: x-fade .18s ease-out; }
+.exclip .x-sheet { position: relative; width: 100%; max-width: 448px; max-height: min(88vh, 820px); display: flex; flex-direction: column; background: var(--x-surface); border: 1px solid var(--x-line-strong); border-radius: 24px; box-shadow: var(--x-shadow); animation: x-pop .2s cubic-bezier(.2, .8, .2, 1); outline: none; }
+.exclip .x-sheet-wide { max-width: 640px; }
+.exclip .x-sheet-grip { display: none; }
+.exclip .x-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px 4px 22px; }
+.exclip .x-sheet-title { font-size: 17px; font-weight: 650; }
+.exclip .x-sheet-body { padding: 8px 22px 22px; overflow-y: auto; overscroll-behavior: contain; }
+.exclip .x-sheet-subhead { display: flex; align-items: center; gap: 4px; margin: -4px 0 8px -10px; }
+@keyframes x-fade { from { opacity: 0; } }
+@keyframes x-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes x-rise { from { transform: translateY(100%); } }
+
+/* Trade sheet */
+.exclip .x-trade { display: flex; flex-direction: column; gap: 16px; }
+.exclip .x-trade .x-tabs { margin-bottom: 0; }
+.exclip .x-trade-panel { display: flex; flex-direction: column; gap: 16px; }
+.exclip .x-amount { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 0 4px; }
+.exclip .x-amount-line { display: flex; align-items: baseline; justify-content: center; max-width: 100%; font-size: 56px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.exclip .x-amount-line.is-sm { font-size: 42px; }
+.exclip .x-amount-line.is-xs { font-size: 32px; }
+.exclip .x-amount-cur { color: var(--x-text); }
+.exclip .x-amount-unit { font-size: .45em; color: var(--x-text-2); margin-left: 8px; font-weight: 600; letter-spacing: 0; }
+.exclip .x-amount-input { min-width: 1ch; max-width: 100%; border: 0; background: transparent; color: var(--x-text); font: inherit; letter-spacing: inherit; text-align: center; outline: none; padding: 0; field-sizing: content; }
+.exclip .x-amount-input::placeholder { color: var(--x-text-3); }
+.exclip .x-toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; background: var(--x-surface-2); color: var(--x-text-2); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
+.exclip .x-toggle:hover { color: var(--x-text); }
+.exclip .x-legs { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.exclip .x-leg { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "label label label" "ico main chev"; align-items: center; column-gap: 12px; row-gap: 6px; width: 100%; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--x-line); background: var(--x-surface-2); text-align: left; }
+.exclip .x-leg:hover { border-color: var(--x-line-strong); }
+.exclip .x-leg-label { grid-area: label; }
+.exclip .x-leg > .x-asset-ico { grid-area: ico; }
+.exclip .x-leg > .x-row-main { grid-area: main; }
+.exclip .x-leg > svg { grid-area: chev; color: var(--x-text-3); }
+.exclip .x-flip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--x-surface); background: var(--x-surface-3); color: var(--x-text); }
+.exclip .x-quote-line { min-height: 22px; font-size: 14px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.exclip .x-review-hero { display: flex; flex-direction: column; gap: 14px; padding: 14px; border-radius: 16px; background: var(--x-surface-2); }
+.exclip .x-review-leg { display: flex; align-items: center; gap: 12px; }
+.exclip .x-steps { display: flex; flex-direction: column; gap: 0; padding: 4px 0; }
+.exclip .x-step { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 0; color: var(--x-text-3); font-weight: 550; }
+.exclip .x-step:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 38px; bottom: -10px; width: 2px; background: var(--x-line-strong); }
+.exclip .x-step-dot { position: relative; z-index: 1; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--x-line-strong); background: var(--x-surface); flex: none; }
+.exclip .x-step.is-active { color: var(--x-text); }
+.exclip .x-step.is-active .x-step-dot { border-color: var(--x-accent); color: var(--x-accent-text); }
+.exclip .x-step.is-done { color: var(--x-text); }
+.exclip .x-step.is-done .x-step-dot { border-color: var(--x-up); background: var(--x-up); color: #fff; }
+.exclip .x-step.is-failed { color: var(--x-down); }
+.exclip .x-step.is-failed .x-step-dot { border-color: var(--x-down); background: var(--x-down); color: #fff; }
+.exclip .x-links { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.exclip .x-links a { color: var(--x-accent-text); display: inline-flex; align-items: center; gap: 4px; font-weight: 550; }
+.exclip .x-addr-line { display: flex; align-items: center; gap: 8px; }
+.exclip .x-clip-note { margin-top: 8px; }
+.exclip .x-wallet-ico { width: 32px; height: 32px; border-radius: 8px; flex: none; object-fit: contain; background: var(--x-surface-2); }
+.exclip .x-screen { display: contents; }
+
+/* ---------- Tablet: icon rail ---------- */
+@media (max-width: 1199px) {
+  .exclip .x-adv-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "chart" "side" "orders"; }
+  .exclip .x-adv-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+}
+@media (max-width: 1023px) {
+  .exclip { --x-rail: 76px; }
+  .exclip .x-rail { padding: 16px 10px; align-items: center; }
+  .exclip .x-rail .x-wordmark, .exclip .x-rail-link span, .exclip .x-rail-foot .x-fine { display: none; }
+  .exclip .x-rail-link { justify-content: center; padding: 12px; }
+  .exclip .x-rail-foot .x-btn { width: 48px; height: 48px; padding: 0; font-size: 0; gap: 0; }
+  .exclip .x-home-top, .exclip .x-portfolio-grid, .exclip .x-asset-layout { grid-template-columns: minmax(0, 1fr); }
+  .exclip .x-asset-side { display: none; }
+  .exclip .x-sticky-bar { display: flex; gap: 10px; position: fixed; left: var(--x-rail); right: 0; bottom: 0; z-index: 30; padding: 12px 24px calc(12px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--x-canvas) 92%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--x-line); }
+  .exclip .x-sticky-bar .x-btn { flex: 1; }
+  /* The asset page's fixed trade bar covers the bottom of the screen: the footer, the last thing on the page, makes
+   * room for it. */
+  .exclip.x-app:has(.x-page-asset) .x-footer { padding-bottom: calc(28px + 76px + env(safe-area-inset-bottom)); }
+  .exclip .x-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- Phone: bottom tab bar, bottom sheets ---------- */
+@media (max-width: 767px) {
+  .exclip { font-size: 15px; }
+  .exclip.x-app { grid-template-columns: minmax(0, 1fr); }
+  .exclip .x-rail { display: none; }
+  .exclip .x-top { padding: 10px 16px; gap: 8px; }
+  .exclip .x-brand-top { display: inline-flex; padding: 0; font-size: 18px; gap: 8px; }
+  .exclip .x-brand-top .x-wordmark { display: none; }
+  .exclip .x-searchbtn { width: 40px; flex: none; padding: 0; justify-content: center; border-radius: 50%; }
+  .exclip .x-searchbtn-label, .exclip .x-searchbtn .x-kbd { display: none; }
+  .exclip .x-top-end .x-btn { height: 36px; padding: 0 14px; font-size: 14px; }
+  .exclip .x-main { padding: 16px 16px 32px; }
+  /* The footer is last on the page, so it is what clears the tab bar. */
+  .exclip .x-footer { width: calc(100% - 32px); padding: 16px 0 calc(var(--x-tabbar) + 16px + env(safe-area-inset-bottom)); }
+  .exclip .x-main-col > .x-banner { margin: 12px 16px 0; }
+  .exclip .x-tabbar { display: grid; grid-template-columns: repeat(3, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; height: calc(var(--x-tabbar) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: color-mix(in srgb, var(--x-canvas) 94%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--x-line); }
+  .exclip .x-tabbar-link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--x-text-3); }
+  .exclip .x-tabbar-link.is-on { color: var(--x-text); }
+  .exclip .x-tabbar-link.is-on svg { color: var(--x-accent-text); }
+  .exclip .x-sticky-bar { left: 0; bottom: calc(var(--x-tabbar) + env(safe-area-inset-bottom)); padding: 10px 16px; }
+  .exclip.x-app:has(.x-page-asset) .x-footer { padding-bottom: calc(var(--x-tabbar) + 16px + 72px + env(safe-area-inset-bottom)); }
+  .exclip .x-card { padding: 16px; border-radius: 14px; }
+  .exclip .x-h1 { font-size: 24px; }
+  .exclip .x-hero-connect .x-h1 { font-size: 26px; }
+  .exclip .x-balance, .exclip .x-price { font-size: 34px; }
+  .exclip .x-grid-3 { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .exclip .x-hide-sm { display: none; }
+  .exclip .x-actions { max-width: none; }
+  .exclip .x-action-circle { width: 48px; height: 48px; }
+  .exclip .x-pair-head { gap: 12px; }
+  .exclip .x-pair-stats { gap: 12px 20px; }
+  .exclip .x-adv-side { grid-template-columns: minmax(0, 1fr); }
+  .exclip .x-table th, .exclip .x-table td { padding: 10px 4px; }
+  .exclip .x-table .x-asset-cell { gap: 8px; }
+  .exclip .x-stats { gap: 12px; }
+
+  .exclip.x-portal { align-items: flex-end; padding: 0; }
+  .exclip .x-sheet, .exclip .x-sheet-wide { max-width: none; max-height: 92vh; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: 0; animation: x-rise .24s cubic-bezier(.2, .8, .2, 1); padding-bottom: env(safe-area-inset-bottom); }
+  .exclip .x-sheet-grip { display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--x-line-strong); margin: 8px auto 0; }
+  .exclip .x-sheet-head { padding: 6px 10px 2px 18px; }
+  .exclip .x-sheet-body { padding: 8px 16px 20px; }
+  .exclip .x-amount-line { font-size: 48px; }
+  .exclip .x-amount-line.is-sm { font-size: 36px; }
+  .exclip .x-amount-line.is-xs { font-size: 28px; }
+}
+
+@media (max-width: 379px) {
+  .exclip .x-top-end .x-icon-btn { width: 36px; height: 36px; }
+  .exclip .x-action { min-width: 0; }
+  .exclip .x-action-circle { width: 44px; height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exclip *, .exclip *::before, .exclip *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  .exclip .x-skel { animation: none; background: var(--x-skel); }
+  .exclip .x-spin { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .exclip .x-btn, .exclip .x-pill.is-on, .exclip .x-tab.is-on { border: 1px solid ButtonText; }
+}
