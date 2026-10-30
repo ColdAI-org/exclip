@@ -27,7 +27,7 @@ test("ceremonies refuse an rpId that isn't this host before touching the authent
   assert.equal(auth.calls.length, 0);
 });
 
-test("create: the options the brief requires, PRF evaluated with the wallet input, nothing secret in the response", async () => {
+test("create: a discoverable passkey with user verification, ES256 or EdDSA, no attestation, PRF evaluated with the wallet input, nothing secret in the response", async () => {
   const auth = new FakeAuthenticator();
   const c = await createPasskey(auth.env(), challenge());
   const pk = (auth.calls[0]!.options as CredentialCreationOptions).publicKey!;
