@@ -1,0 +1,26 @@
+ExClip
+Copyright 2026 ColdAI LLC
+
+This product includes software developed by ColdAI LLC, the original
+author of ExClip. It is licensed under the Apache License, Version 2.0
+(see LICENSE).
+
+-------------------------------------------------------------------------------
+Clip Wallet
+
+packages/clip-wallet-core and packages/clip-wallet-vault are copies of the
+@clip-wallet/core and @clip-wallet/vault packages from the Clip Wallet
+project (github.com/ColdAI-org/clip-wallet; the commit is recorded in each
+package's UPSTREAM file). They keep the licence they were published under,
+which is included in each package's LICENSE file:
+
+  Copyright (c) 2026 ColdAI
+
+-------------------------------------------------------------------------------
+Trademarks
+
+"ExClip", "Clip Wallet" and the ExClip logo are trademarks of ColdAI LLC.
+The Apache License does not grant permission to use them (section 6). You
+may say that your service is built on ExClip, but a copy that you run for
+other people must use its own name and logo: set brand.name and brand.logo
+in exclip.config.ts.
