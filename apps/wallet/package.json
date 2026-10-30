@@ -1,0 +1,30 @@
+{
+  "name": "@exclip/wallet",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "ExClip's passkey wallet: the Clip Wallet popup served from its own origin (docs/embedded-wallet.md).",
+  "scripts": {
+    "dev": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "tsx --test test/*.test.ts",
+    "gen:tokens": "tsx scripts/gen-sodax-tokens.ts"
+  },
+  "dependencies": {
+    "@clip-wallet/core": "workspace:*",
+    "@clip-wallet/vault": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "viem": "2.57.7"
+  },
+  "devDependencies": {
+    "@exclip/config": "workspace:*",
+    "@types/node": "catalog:",
+    "qrcode": "1.5.4",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}
