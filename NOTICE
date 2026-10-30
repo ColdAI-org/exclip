@@ -17,6 +17,22 @@ UPSTREAM file. Clip Wallet is licensed under the Apache License, Version
 2.0, and each package's LICENSE file holds a copy.
 
 -------------------------------------------------------------------------------
+Third-party components
+
+1. Inter typeface
+   The wordmark in brand/exclip-wordmark-*.svg and brand/exclip-lockup-*.svg is
+   set in Inter Bold, outlined. Copyright (c) The Inter Project Authors
+   (https://github.com/rsms/inter), SIL Open Font License 1.1.
+
+2. Contributor Covenant
+   CODE_OF_CONDUCT.md is adapted from the Contributor Covenant, version 2.1
+   (https://www.contributor-covenant.org), licensed under CC BY 4.0.
+
+npm dependencies are not vendored; each is distributed under its own licence,
+as listed in its package. Builds of apps/web bundle them, and whoever
+distributes a build must meet those licences.
+
+-------------------------------------------------------------------------------
 Trademarks
 
 "ExClip", "Clip Wallet" and the ExClip logo are trademarks of ColdAI LLC.
