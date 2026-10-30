@@ -19,7 +19,7 @@ A useful report says:
 - whether funds, keys, passkeys or backups are at risk.
 
 A proof of concept is welcome. Test against your own deployment and your own
-wallets, preferably on test networks.
+wallets. ExClip runs on live networks only, so use small amounts.
 
 ## What happens next
 
