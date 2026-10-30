@@ -2,8 +2,8 @@ packages:
   - apps/*
   - packages/*
 
-# Install scripts are opt-in, and pnpm refuses a package whose script is undecided. esbuild (Vite, tsx, the
-# server build) needs its postinstall to fetch the platform binary. The native add-ons pulled in by the SODAX
+# Install scripts are opt-in, and pnpm refuses a package whose script is undecided. esbuild (used by Vite and
+# tsx) needs its postinstall to fetch the platform binary. The native add-ons pulled in by the SODAX
 # wallet SDK stay off: the SDK runs in the browser, where they can't load, and each has a pure-JS fallback.
 allowBuilds:
   bigint-buffer: false

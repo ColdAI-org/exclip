@@ -1,6 +1,6 @@
 /** Response headers for ExClip's two origins. One definition, used by the Vite dev and preview servers and by
- * apps/server when it serves the built apps (EXCLIP_SERVE_STATIC). If you put ExClip behind another web server or a
- * CDN, send exactly these (docs/self-hosting.md). */
+ * apps/server when it serves the built apps (server.serveStatic in exclip.config.ts). If you put ExClip behind another
+ * web server or a CDN, send exactly these (docs/self-hosting.md). */
 
 /**
  * The wallet origin. Its page holds the user's keys, so it runs only its own files and talks to three places: its

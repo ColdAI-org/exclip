@@ -52,8 +52,8 @@ export type ExclipConfigInput = {
     embeddedWallet?: boolean;
   };
   wallet?: {
-    /** Until a passkey wallet is backed up (phrase saved or a second passkey), deposits above this many US dollars
-     * are refused. Default 100. */
+    /** Until a passkey wallet is backed up (phrase saved or a second passkey), the app shows a backup banner with this
+     * limit in US dollars, and the wallet hides its deposit address once it holds this much. Default 100. */
     unbackedLimitUsd?: number;
     /** Encrypted backup versions one passkey may store. Default 50. */
     maxBackupVersions?: number;
