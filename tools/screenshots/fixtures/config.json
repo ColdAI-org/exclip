@@ -1,0 +1,9 @@
+{
+  "tradingEnabled": true,
+  "sodaxConfigured": true,
+  "partnerFeeBps": 0,
+  "feeReceiver": null,
+  "embeddedWallet": true,
+  "walletOrigin": "http://localhost:5311",
+  "unbackedLimitUsd": 100
+}
