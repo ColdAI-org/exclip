@@ -53,8 +53,10 @@ export default {
   },
 
   wallet: {
-    // Until a passkey wallet is backed up (recovery phrase saved, or a second passkey added), the app shows a backup
-    // banner with this limit in US dollars, and the wallet hides its deposit address once it holds this much.
+    // Deposit limit in US dollars for a passkey wallet that isn't backed up yet. Backed up: the recovery phrase was
+    // saved and checked, or the passkey has a server backup and the user confirmed it syncs, or two passkeys each
+    // have one. The app and the popup state the limit, and the popup hides the deposit address once the app reports
+    // holdings at or above it. The wallet build bakes it in, so rebuild after a change.
     unbackedLimitUsd: 100,
     // Encrypted backup versions kept per passkey.
     maxBackupVersions: 50,
@@ -73,7 +75,8 @@ export default {
     allowMemoryStore: false,
     // Behind a reverse proxy or load balancer: the number of proxy hops to trust for the client address.
     trustProxy: 0,
-    // Serve the built app and wallet from this server, chosen by the Host header (docs/self-hosting.md).
+    // Serve the built app and wallet from this server, chosen by the request's host name (X-Forwarded-Host behind a
+    // trusted proxy; docs/self-hosting.md).
     serveStatic: false,
     // Optional CoinGecko Pro key for market data; the public API is used without one. COINGECKO_API_KEY wins.
     coingeckoApiKey: null,
