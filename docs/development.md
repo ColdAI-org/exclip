@@ -86,8 +86,8 @@ For one package:
 | `pnpm --filter @exclip/wallet run gen:tokens <file>` | Writes the wallet's token table again ([add a network](#add-a-network)) |
 | `pnpm --filter <package> test` | Runs one package's tests |
 
-CI runs `pnpm install --frozen-lockfile`, then typecheck, lint, test and
-build, on every push to `main` and every pull request.
+CI runs `pnpm install --frozen-lockfile`, then typecheck, lint, the link
+check, test and build, on every push to `main` and every pull request.
 
 ## Tests
 

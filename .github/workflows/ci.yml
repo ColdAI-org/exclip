@@ -36,6 +36,9 @@ jobs:
         run: pnpm typecheck
       - name: Lint
         run: pnpm lint
+      # Every relative link, heading anchor and image in the Markdown must resolve. External links aren't fetched.
+      - name: Docs links
+        run: pnpm run docs:links
       - name: Test
         run: pnpm test
       # The web app's build needs about 2.6 GB of heap: Rollup keeps every module of the SODAX wallet SDKs (about

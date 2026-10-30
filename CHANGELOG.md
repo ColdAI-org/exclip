@@ -20,8 +20,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   holds the passkey wallet's backups, and Redis or Postgres the rate limits
   and passkey challenges.
 - Vendored copies of `@clip-wallet/core` and `@clip-wallet/vault`.
-- CI that typechecks, lints, tests and builds every change, with actions
-  pinned by commit SHA.
+- CI that typechecks, lints, checks the Markdown's links, tests and builds
+  every change, with actions pinned by commit SHA.
 - A brand kit in `brand/`: the mark, a small mark for 16 to 32 px, the
   glyph, the wordmark and two lockups as SVG, with the colours, contrast
   ratios and rules for use in `brand/README.md`. `pnpm run brand` checks the
