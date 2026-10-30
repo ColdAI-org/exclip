@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64">
+  <title>ExClip</title>
+  <!-- Two routes cross on a dark tile. Cyan runs over; blue stops short on both sides of it, so the two never touch:
+       two chains crossing without a bridge. For 48 px and up; exclip-mark-small.svg draws 16 and 32 px. -->
+  <defs>
+    <linearGradient id="exclip-tile" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1A1E28"/>
+      <stop offset="1" stop-color="#0B0D12"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#exclip-tile)"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="15.5" fill="none" stroke="#FFFFFF" stroke-opacity=".08"/>
+  <!-- Blue: corner to corner, cut 3 units clear of the cyan route. Round outer ends, square cut ends. -->
+  <path d="M18 18L27 27M37 37L46 46" stroke="#2563EB" stroke-width="8"/>
+  <circle cx="18" cy="18" r="4" fill="#2563EB"/>
+  <circle cx="46" cy="46" r="4" fill="#2563EB"/>
+  <!-- Cyan: the other diagonal, unbroken. -->
+  <path d="M18 46L46 18" stroke="#00B4F0" stroke-width="8" stroke-linecap="round"/>
+</svg>

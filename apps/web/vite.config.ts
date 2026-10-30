@@ -5,13 +5,13 @@
  * always uses DEV_ORIGINS: this app on http://localhost:5173, the wallet on :5311. Switches that may change without a
  * rebuild (trading, the passkey wallet, the partner fee) come from the server's /api/exclip/config at runtime.
  * index.html takes the brand's name and logo here, and a production build fails if the page would break under the
- * app's CSP (src/lib/page-policy.ts).
+ * app's CSP (src/lib/page-policy.ts). The web app manifest (/manifest.webmanifest) is written here too.
  *
  * Dev: http://localhost:5173, /api proxied to apps/server on :8080. `vite preview` serves the build with the production
  * security headers so the CSP can be checked locally. */
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { appSecurityHeaders, DEV_ORIGINS, webBuildConfig, type WebBuildConfig } from "@exclip/config";
+import { appSecurityHeaders, DEFAULT_BRAND, DEV_ORIGINS, webBuildConfig, type WebBuildConfig } from "@exclip/config";
 import { loadPublicConfig } from "@exclip/config/node";
 import { strictPage } from "./src/lib/page-policy.ts";
 
@@ -23,18 +23,63 @@ const API_PROXY = { "/api": { target: DEV_ORIGINS.server, changeOrigin: false } 
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** Puts the brand's name and logo in index.html, and with `strict` (production builds) checks the page against the
- * CSP. It runs after Vite has written the entry tags, so the check sees the page as it ships. */
+const MANIFEST = "/manifest.webmanifest";
+/** The dark canvas (src/styles/exclip.css), as in index.html's theme-color. */
+const CANVAS = "#07080A";
+
+/** ExClip's PNG icons (public/icons, rendered from brand/ by `pnpm run brand`) go only with ExClip's own name and logo.
+ * A rebrand's logo is its only icon, so ExClip's mark never lands on another operator's home screen. */
+const isExclipBrand = (brand: WebBuildConfig["brand"]) => brand.name === DEFAULT_BRAND.name && brand.logo === DEFAULT_BRAND.logo;
+
+/** The web app manifest, for "Add to Home Screen". `display: "browser"` keeps the app in a normal browser tab, where the
+ * passkey wallet's popup works as it does on the web. */
+function webManifest(brand: WebBuildConfig["brand"]): string {
+  const icons = isExclipBrand(brand)
+    ? [
+        { src: "/icons/exclip-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/icons/exclip-512.png", sizes: "512x512", type: "image/png" },
+        { src: "/icons/exclip-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      ]
+    : [/\.svg(?:[?#]|$)/i.test(brand.logo) ? { src: brand.logo, sizes: "any", type: "image/svg+xml" } : { src: brand.logo }];
+  const manifest = {
+    name: brand.name,
+    short_name: brand.name,
+    start_url: "/",
+    scope: "/",
+    display: "browser",
+    background_color: CANVAS,
+    theme_color: CANVAS,
+    icons,
+  };
+  return `${JSON.stringify(manifest, null, 2)}\n`;
+}
+
+/** Puts the brand's name, logo and manifest in index.html, and with `strict` (production builds) checks the page against
+ * the CSP. It runs after Vite has written the entry tags, so the check sees the page as it ships. It also serves the
+ * manifest in dev and writes it into the build. */
 function brandPage(web: WebBuildConfig, strict: boolean): Plugin {
+  const manifest = webManifest(web.brand);
+  const links = [`<link rel="manifest" href="${MANIFEST}" />`];
+  if (isExclipBrand(web.brand)) links.push(`<link rel="apple-touch-icon" href="/icons/exclip-180.png" />`);
   return {
     name: "exclip-web-page",
+    configureServer(server) {
+      server.middlewares.use(MANIFEST, (_req, res) => {
+        res.setHeader("content-type", "application/manifest+json");
+        res.end(manifest);
+      });
+    },
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: MANIFEST.slice(1), source: manifest });
+    },
     transformIndexHtml: {
       order: "post",
       handler(html) {
         // Replacer functions: a "$" in the brand name is text, not a replacement pattern.
         const page = html
           .replace(/<title>[^<]*<\/title>/, () => `<title>${escapeHtml(web.brand.name)}</title>`)
-          .replace(/<link rel="icon" href="[^"]*"/, () => `<link rel="icon" href="${escapeHtml(web.brand.logo)}"`);
+          .replace(/<link rel="icon" href="[^"]*"/, () => `<link rel="icon" href="${escapeHtml(web.brand.logo)}"`)
+          .replace(/(\s*)<\/head>/, (_, space: string) => `${links.map((link) => `${space}  ${link}`).join("")}${space}</head>`);
         return strict ? strictPage(page) : page;
       },
     },
