@@ -174,8 +174,7 @@ change. Without a database, the server keeps everything in memory.
 ### Develop
 
 ```sh
-pnpm typecheck && pnpm lint && pnpm test && pnpm build   # what CI runs
-pnpm run docs:links                                      # every relative link and image in the Markdown
+pnpm typecheck && pnpm lint && pnpm run docs:links && pnpm test && pnpm build   # what CI runs
 ```
 
 [Development](docs/development.md) covers the repository's layout, the
