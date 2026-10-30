@@ -65,7 +65,7 @@ nobody added to its list.
 <table>
   <tr>
     <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/home-dark-desktop.png"><img alt="Home: top movers, trending and new assets, above the market list with each asset's price, 7-day chart and 24-hour change" src="docs/media/home-light-desktop.png"></picture></td>
-    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/trade-dark-desktop.png"><img alt="The trade sheet: $250 of USDC on Base buys about 0.06457 ETH on Base" src="docs/media/trade-light-desktop.png"></picture></td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/trade-dark-desktop.png"><img alt="The trade sheet: $250 of USDC on Base buys about 0.06457 ETH on Arbitrum" src="docs/media/trade-light-desktop.png"></picture></td>
   </tr>
   <tr>
     <td align="center"><sub>Home: the markets at a glance</sub></td>
