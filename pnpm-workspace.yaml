@@ -1,0 +1,57 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Install scripts are opt-in, and pnpm refuses a package whose script is undecided. esbuild (Vite, tsx, the
+# server build) needs its postinstall to fetch the platform binary. The native add-ons pulled in by the SODAX
+# wallet SDK stay off: the SDK runs in the browser, where they can't load, and each has a pure-JS fallback.
+allowBuilds:
+  bigint-buffer: false
+  blake-hash: false
+  bufferutil: false
+  cbor-extract: false
+  core-js: false
+  core-js-pure: false
+  esbuild: true
+  keccak: false
+  protobufjs: false
+  secp256k1: false
+  tiny-secp256k1: false
+  usb: false
+  utf-8-validate: false
+
+# Peers are installed only when a package lists them. Automatic peers would pull React Native (via the
+# wallet SDK's mobile-only storage adapter) into a browser app.
+autoInstallPeers: false
+
+# Do not install a release until it has been public for a day (supply-chain hygiene).
+minimumReleaseAge: 1440
+
+catalog:
+  '@types/node': ^24.10.0
+  '@types/react': ^19.2.0
+  '@types/react-dom': ^19.2.0
+  '@vitejs/plugin-react': ^5.0.4
+  react: 19.1.0
+  react-dom: 19.1.0
+  tsx: 4.21.0
+  typescript: ~5.9.2
+  vite: ^7.3.7
+
+# Security floors for transitive dependencies, range-scoped so nothing moves across a major version.
+overrides:
+  'axios@<0.34.0': '^0.34.0'
+  'axios@>=1.0.0 <1.20.0': '^1.20.0'
+  'body-parser@>=2.0.0 <2.4.0': '^2.4.0'
+  'brace-expansion@>=2.0.0 <2.1.4': '^2.1.4'
+  'brace-expansion@>=5.0.0 <5.0.11': '^5.0.11'
+  'form-data@>=4.0.0 <4.0.6': '^4.0.6'
+  'nanoid@>=3.0.0 <3.3.18': '^3.3.18'
+  'nanoid@>=5.0.0 <5.1.16': '^5.1.16'
+  'protobufjs@>=7.0.0 <7.6.1': '^7.6.1'
+  'proxy-addr@>=2.0.0 <2.0.8': '^2.0.8'
+  'source-map-js@>=1.0.0 <1.2.2': '^1.2.2'
+  'toml@<5.0.1': '^5.0.1'
+  'valibot@>=0.31.0 <1.2.0': '^1.2.0'
+  'vite@>=7.0.0 <7.3.7': '^7.3.7'
+  'ws@>=8.0.0 <8.21.0': '^8.21.0'
