@@ -5,5 +5,5 @@
     "types": ["node"],
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "test", "../../exclip.config*.ts"]
+  "include": ["src", "test", "scripts", "../../exclip.config*.ts"]
 }
