@@ -30,6 +30,7 @@ body { margin: 0; }
   --x-warn: #f5a524;
   --x-warn-soft: rgb(245 165 36 / 0.12);
   --x-focus: var(--brand-accent-hover, #38c8ff);
+  --x-focus-border: var(--brand-accent, #00b4f0);
   --x-skel: rgb(255 255 255 / 0.06);
   --x-skel-hi: rgb(255 255 255 / 0.11);
   --x-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
@@ -62,7 +63,10 @@ body { margin: 0; }
   --x-down: #dc2626;
   --x-warn: #b45309;
   --x-warn-soft: rgb(180 83 9 / 0.08);
+  /* Focus indicators need 3:1 against the surface (WCAG 2.2 SC 1.4.11). On white, the default accent is 2.39:1 and the
+     ink 4.87:1, so the light theme draws them in the ink. */
   --x-focus: var(--brand-accent-ink, #0077b6);
+  --x-focus-border: var(--brand-accent-ink, #0077b6);
   --x-skel: rgb(9 11 15 / 0.06);
   --x-skel-hi: rgb(9 11 15 / 0.1);
   --x-shadow: 0 24px 64px rgb(9 11 15 / 0.18);
@@ -244,7 +248,7 @@ body { margin: 0; }
 .exclip .x-field { display: flex; flex-direction: column; gap: 6px; }
 .exclip .x-field-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .exclip .x-input { width: 100%; height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--x-line-strong); background: var(--x-surface-2); color: var(--x-text); font: inherit; font-size: 16px; }
-.exclip .x-input:focus { outline: none; border-color: var(--x-accent); box-shadow: 0 0 0 3px var(--x-accent-soft); }
+.exclip .x-input:focus { outline: none; border-color: var(--x-focus-border); box-shadow: 0 0 0 3px var(--x-accent-soft); }
 .exclip .x-input[aria-invalid="true"] { border-color: var(--x-down); }
 .exclip .x-input-sm { height: 34px; width: auto; font-size: 14px; padding: 0 10px; }
 .exclip .x-input-group { display: flex; gap: 8px; align-items: center; }
@@ -257,7 +261,7 @@ body { margin: 0; }
 .exclip .x-chip:hover:not(:disabled) { background: var(--x-surface-2); }
 .exclip .x-chip:disabled { opacity: .4; }
 .exclip .x-search-field { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; border-radius: 12px; background: var(--x-surface-2); border: 1px solid var(--x-line); color: var(--x-text-3); margin-bottom: 8px; }
-.exclip .x-search-field:focus-within { border-color: var(--x-accent); }
+.exclip .x-search-field:focus-within { border-color: var(--x-focus-border); }
 .exclip .x-search-field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--x-text); font: inherit; font-size: 16px; outline: none; }
 .exclip .x-search-list, .exclip .x-picker-list { max-height: min(60vh, 520px); overflow-y: auto; }
 

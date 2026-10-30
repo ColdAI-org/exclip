@@ -45,7 +45,7 @@ X stays inside the safe zone. Never edit those by hand; edit the SVG here and ru
 | Tile | `#1A1E28` | The light end of the tile (top left) |
 | Small tile | `#12151D` | The small mark's flat tile |
 | White | `#FFFFFF` | Wordmark and glyph on dark backgrounds |
-| Cyan ink | `#0077B6` | Cyan-coloured **small text** on light surfaces (the app's `accentInk`) |
+| Cyan ink | `#0077B6` | Cyan-coloured **small text** and focus indicators on light surfaces (the app's `accentInk`) |
 | Blue light | `#3B82F6` | Blue-coloured small text on dark surfaces |
 | Cyan hover | `#38C8FF` | Hover and pressed accent on the dark canvas (the app's `accentHover`) |
 
@@ -67,9 +67,10 @@ WCAG 2.2 asks for 4.5:1 for normal text (SC 1.4.3), and 3:1 for large text (≥ 
 icons and UI component boundaries (SC 1.4.11).
 
 - **Cyan is for dark surfaces.** It is 8.38:1 on the dark canvas but 2.39:1 on white and 2.23:1 on the light canvas,
-  too light for text or thin lines there. The app writes accent-coloured small text on light surfaces in Cyan ink
-  (4.87:1 on white, 4.54:1 on the light canvas), and the colour glyph is for dark backgrounds only. On light, use the
-  mark (its tile carries the colours) or the ink glyph.
+  too light for text or thin lines there. On light surfaces the app writes accent-coloured small text, and draws focus
+  rings and input focus borders, in Cyan ink (4.87:1 on white, 4.54:1 on the light canvas), above the 3:1 a focus
+  indicator needs. The colour glyph is for dark backgrounds only. On light, use the mark (its tile carries the colours)
+  or the ink glyph.
 - **Blue is for light surfaces, as text.** It is 5.17:1 on white but 3.88:1 on the dark canvas: enough for the mark
   (3.22:1 against the tile, above the 3:1 for graphics) and not enough for small text. Blue small text on dark uses
   Blue light (5.45:1 on the dark canvas). The app has no blue text today.

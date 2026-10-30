@@ -60,3 +60,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The server stops with exit code 1 and says why when it can't listen on its
   port, such as one another process holds. It used to print its start-up
   lines as if it were running.
+- In the light theme, input focus borders are drawn in `accentInk`, like the
+  focus ring. ExClip's cyan accent was 2.39:1 against white, below the 3:1
+  a focus indicator needs; the ink is 4.87:1. The dark theme is unchanged.

@@ -102,7 +102,7 @@ deploy.
 | `brand.logo` | `"/logo.svg"` | A file in `apps/web/public`, written as a path like `/my-logo.svg`, or an `https://` URL. |
 | `brand.colors.accent` | `#00B4F0` | Buttons (with dark text on them), focus rings and links on the dark canvas. |
 | `brand.colors.accentHover` | `#38C8FF` | Hover and pressed states. |
-| `brand.colors.accentInk` | `#0077B6` | Small text and links on light surfaces. |
+| `brand.colors.accentInk` | `#0077B6` | Small text, links and focus rings on light surfaces. |
 | `brand.termsUrl` | `null` | Your terms of use (`https://`), linked from the footer. |
 | `brand.privacyUrl` | `null` | Your privacy notice (`https://`), linked from the footer. |
 
