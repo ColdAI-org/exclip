@@ -110,14 +110,34 @@ deploy.
 cover them (see [NOTICE](../NOTICE)). If you run ExClip for other people, set
 your own `brand.name` and `brand.logo`.
 
-Colours are `#RRGGBB`. The canvas is near-black (`#07080A`) and buttons put
-dark text on the accent, so check contrast when you change them:
+Colours are `#RRGGBB`, and the config checks only that format. The canvas
+is near-black (`#07080A`) and buttons put dark text (`#03141C`) on the
+accent, so check contrast when you change them:
 
 - `accent` and `accentHover` need a contrast ratio of at least 4.5:1 against
-  `#07080A`. Pick a light, saturated colour.
-- `accentInk` needs at least 4.5:1 against white.
+  `#07080A` and against `#03141C`. Pick a light, saturated colour.
+- `accentInk` needs at least 4.5:1 against white and against the light
+  canvas, `#F6F7F9`.
 
-The defaults reach about 8.4:1 and 4.9:1.
+[The contrast rule](branding.md#the-contrast-rule) gives the defaults'
+ratios.
+
+Icons follow the logo:
+
+- **The app's tab icon** is `brand.logo`.
+- **Home-screen icons.** With ExClip's own name and logo (`brand.name`
+  `"ExClip"` and `brand.logo` `"/logo.svg"`), the build lists ExClip's PNG
+  icons in the web app manifest (`/manifest.webmanifest`) and adds an Apple
+  touch icon. With any other name or logo, the manifest lists your logo as its
+  only icon, and the page names no ExClip icon. A square logo works best.
+- **The wallet window's tab icon** is `brand.logo` too, inlined into the
+  wallet page as a `data:` URL, because the wallet's CSP loads images only
+  from itself. That works for a `.svg`, `.png`, `.ico` or `.webp` file in
+  `apps/web/public`. If the logo is such a file and it doesn't exist, the
+  wallet build stops. An `https://` logo, or another file type, leaves the
+  wallet window with the browser's default icon.
+
+The [branding guide](branding.md) walks through a full rebrand.
 
 ## `features`
 

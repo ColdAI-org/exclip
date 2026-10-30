@@ -4,8 +4,9 @@ This page takes you from a clone to a public deployment. It covers building,
 the database, running the server, serving the two origins with the right
 headers, opening in stages, and turning things off again.
 
-Read [You are the operator](../README.md#you-are-the-operator) first. Try
-every flow on test networks or with small amounts before real users arrive.
+Read [operator responsibility](../README.md#operator-responsibility) first.
+ExClip trades on live networks only, so try every flow with small amounts
+before real users arrive.
 
 ## What you run
 
@@ -106,6 +107,25 @@ recovery phrase, they are the only way back to the wallet after losing the
 device. Back them up regularly and test a restore. The `exclip_kv*` tables
 hold short-lived state and need no backup.
 
+If your Postgres provider's backups don't cover this, give ExClip a
+database of its own and dump it, leaving out the short-lived rows:
+
+```sh
+pg_dump "$DATABASE_URL" --format=custom --exclude-table-data='exclip_kv*' \
+  --file="exclip-$(date -u +%F).dump"
+```
+
+To test a restore, load a dump into an empty scratch database and count
+the backups:
+
+```sh
+pg_restore --no-owner --dbname="$SCRATCH_URL" exclip-2026-10-31.dump
+psql "$SCRATCH_URL" -c 'SELECT count(*) FROM exclip_wallet_backups'
+```
+
+The dumps hold encrypted backups and passkey public keys, not keys or
+phrases. Keep them as carefully as the database itself.
+
 ## 4. Run the server
 
 ```sh
@@ -130,6 +150,102 @@ that terminates TLS. Run it under a process manager or as a container, and
 stop it with `SIGTERM`: requests in flight get up to 10 seconds to finish.
 Several processes can share one Postgres or Redis. Each process keeps its own
 short cache of SODAX token lists and market data.
+
+Whichever way you run it, keep the repository's layout. Node runs the
+server's TypeScript and the workspace packages straight from their folders,
+through the links `pnpm install` makes
+([development](development.md#the-repository)). Don't copy the server out on
+its own, and don't flatten `node_modules`.
+
+### On a Linux host with systemd
+
+Install Node 24 and pnpm, put the repository in a folder such as
+`/srv/exclip` with your `exclip.config.ts`, and build there:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+```
+
+Then add a unit, `/etc/systemd/system/exclip.service`:
+
+```ini
+[Unit]
+Description=ExClip server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=exclip
+WorkingDirectory=/srv/exclip
+EnvironmentFile=/etc/exclip/env
+ExecStart=/usr/bin/node apps/server/src/index.ts
+Restart=on-failure
+TimeoutStopSec=15
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+- `exclip` is a user that can read `/srv/exclip` and nothing more. The
+  server writes no files.
+- `ExecStart` must point at Node 24. `command -v node` prints the path.
+  `node apps/server/src/index.ts` is what `pnpm start` runs.
+- `/etc/exclip/env` holds the credentials, one `NAME=value` per line
+  (`SODAX_API_KEY`, `DATABASE_URL`, `REDIS_URL`). Make it readable by root
+  only: systemd reads it before it switches to the `exclip` user.
+- systemd stops the server with `SIGTERM`, and `TimeoutStopSec` leaves room
+  for its 10-second drain.
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now exclip
+journalctl -u exclip -f
+```
+
+### In a container
+
+The repository has no Dockerfile. This one is a starting point, not a file
+we test:
+
+```dockerfile
+FROM node:24-slim
+WORKDIR /app
+RUN npm install --global pnpm@12.6.0
+COPY . .
+RUN pnpm install --frozen-lockfile && pnpm build
+USER node
+EXPOSE 8080
+CMD ["node", "apps/server/src/index.ts"]
+```
+
+Keep the pnpm version equal to `packageManager` in `package.json`. Add a
+`.dockerignore`, so local installs and builds stay out of the image:
+
+```text
+.git
+**/node_modules
+**/dist
+```
+
+The image is built with your `exclip.config.ts`, because the build bakes
+your origins and brand into the app and the wallet. Keep credentials out of
+that file, and pass them when the container starts:
+
+```sh
+docker build -t exclip .
+docker run -d --name exclip --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 -e SODAX_API_KEY -e DATABASE_URL exclip
+```
+
+`-e NAME` with no value passes the variable on from your shell, so the key
+stays out of your shell history. The image holds the wallet's build, so build
+it in CI from a reviewed commit, as you would the wallet
+([release controls](embedded-wallet.md#release-controls)).
 
 ### Proxies and client addresses
 
@@ -172,6 +288,36 @@ that is `proxy_set_header Host $host;`. When `server.trustProxy` is above 0,
 the server takes the host from `X-Forwarded-Host` if the request has one, so
 have your proxy set that header itself (`proxy_set_header X-Forwarded-Host
 $host;`) rather than pass on one a client sent.
+
+For example, nginx on the same machine as the server, with
+`server.trustProxy: 1` and a certificate that covers both names:
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name swap.example.org wallet.example.org;
+  ssl_certificate     /etc/ssl/exclip/fullchain.pem;
+  ssl_certificate_key /etc/ssl/exclip/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+
+server {
+  listen 80;
+  server_name swap.example.org wallet.example.org;
+  return 301 https://$host$request_uri;
+}
+```
+
+nginx passes the `Origin` header on unchanged. The server sends each
+origin's security headers itself, so add no `add_header` lines for the CSP,
+CORS or caching.
 
 ### Option B: your own web server or CDN
 
@@ -362,11 +508,14 @@ never its body, with the SODAX key redacted.
 1. Read `CHANGELOG.md` and the diff. Take extra care with the files listed in
    [CONTRIBUTING.md](../CONTRIBUTING.md): `apps/wallet/fee-receivers.json`,
    `apps/wallet/src/`, the message protocol and the security headers.
-2. `pnpm install --frozen-lockfile` and `pnpm build`.
-3. Apply new migrations, then restart the server.
+2. `pnpm install --frozen-lockfile` and `pnpm build`. With Docker, build a
+   new image instead.
+3. Apply new migrations, then restart the server (`systemctl restart
+   exclip`), or replace the container.
 4. Deploy the app and the wallet together. The two share a message protocol,
    so an app from one release and a wallet from another may not understand
    each other.
+5. Run the [smoke checks](#smoke-checks).
 
 Never change `origins.wallet` on a live deployment (see
 [Keep the wallet host](#rollback)).
