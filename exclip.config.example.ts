@@ -39,7 +39,6 @@ export default {
       accent: "#00B4F0",
       accentHover: "#38C8FF",
       accentInk: "#0077B6",
-      gradientTo: "#2563EB",
     },
     // Your terms of use and privacy notice (https), linked from the footer.
     termsUrl: null,

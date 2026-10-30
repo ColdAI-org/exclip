@@ -19,9 +19,8 @@ export type BrandInput = {
   /** A path served by apps/web (its `public/` folder), like "/logo.svg", or an https URL. */
   logo?: string;
   /** Colours (#RRGGBB). accent: buttons, focus rings and links on the dark canvas (buttons put dark text on it);
-   * accentHover: hover and pressed; accentInk: small text and links on light surfaces; gradientTo: the second stop of
-   * the brand gradient. */
-  colors?: { accent?: string; accentHover?: string; accentInk?: string; gradientTo?: string };
+   * accentHover: hover and pressed; accentInk: small text and links on light surfaces. */
+  colors?: { accent?: string; accentHover?: string; accentInk?: string };
   /** Your terms of use and privacy notice (https), linked from the footer. */
   termsUrl?: string | null;
   privacyUrl?: string | null;
@@ -87,7 +86,6 @@ export type Brand = {
   accent: string;
   accentHover: string;
   accentInk: string;
-  gradientTo: string;
   termsUrl: string | null;
   privacyUrl: string | null;
 };
@@ -144,7 +142,6 @@ export const DEFAULT_BRAND: Brand = {
   accent: "#00B4F0",
   accentHover: "#38C8FF",
   accentInk: "#0077B6",
-  gradientTo: "#2563EB",
   termsUrl: null,
   privacyUrl: null,
 };
@@ -169,7 +166,7 @@ const KNOWN_KEYS: Record<string, readonly string[]> = {
   fees: ["partnerFeeBps", "receiver"],
   origins: ["app", "wallet"],
   brand: ["name", "operator", "logo", "colors", "termsUrl", "privacyUrl"],
-  "brand.colors": ["accent", "accentHover", "accentInk", "gradientTo"],
+  "brand.colors": ["accent", "accentHover", "accentInk"],
   features: ["trading", "embeddedWallet"],
   wallet: ["unbackedLimitUsd", "maxBackupVersions", "dailyNewPasskeys"],
   server: ["port", "databaseUrl", "redisUrl", "allowMemoryStore", "trustProxy", "serveStatic", "coingeckoApiKey"],
@@ -288,7 +285,6 @@ export function resolveConfig(input: ExclipConfigInput = {}, env: Env = {}): { c
     accent: color(colors.accent, DEFAULT_BRAND.accent, "brand.colors.accent"),
     accentHover: color(colors.accentHover, DEFAULT_BRAND.accentHover, "brand.colors.accentHover"),
     accentInk: color(colors.accentInk, DEFAULT_BRAND.accentInk, "brand.colors.accentInk"),
-    gradientTo: color(colors.gradientTo, DEFAULT_BRAND.gradientTo, "brand.colors.gradientTo"),
     termsUrl: httpsUrl(b.termsUrl, "brand.termsUrl"),
     privacyUrl: httpsUrl(b.privacyUrl, "brand.privacyUrl"),
   };
@@ -393,7 +389,6 @@ export function webBuildConfig(config: ExclipConfig, dev: boolean) {
       accent: b.accent,
       accentHover: b.accentHover,
       accentInk: b.accentInk,
-      gradientTo: b.gradientTo,
       termsUrl: b.termsUrl,
       privacyUrl: b.privacyUrl,
     },
