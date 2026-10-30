@@ -1,8 +1,8 @@
 /** The passkey wallet's review of a swap, for `pnpm run screenshots`: capture.mjs serves this module as the wallet's
  * page (see walletPage there). It runs the wallet's own screens.ts, policy.ts and styles.css on a sign request built
- * the way the SODAX SDK builds one (apps/wallet/test/sodax-fixtures.ts): 250 USDC for ETH on Base, the trade the
- * trade screenshot quotes. The wallet behind it is a stub whose prepareSign only runs the policy, as for a wallet that
- * is backed up and whose price check passed, and nothing can be signed. Never part of a build. */
+ * the way the SODAX SDK builds one (apps/wallet/test/sodax-fixtures.ts): 250 USDC on Base for ETH on Arbitrum, the
+ * trade the trade screenshot quotes. The wallet behind it is a stub whose prepareSign only runs the policy, as for a
+ * wallet that is backed up and whose price check passed, and nothing can be signed. Never part of a build. */
 import type { Session } from "../../apps/wallet/src/channel.ts";
 import type { SignRequest } from "../../apps/wallet/src/protocol.ts";
 import type { EmbeddedWallet, PreparedSign } from "../../apps/wallet/src/wallet.ts";
@@ -12,13 +12,14 @@ import { HUB, ctx, swapRequest } from "../../apps/wallet/test/sodax-fixtures.ts"
 import account from "./fixtures/account.json";
 
 const BASE = "0x2105.base";
+const ARBITRUM = "0xa4b1.arbitrum";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const ETH = "0x0000000000000000000000000000000000000000";
 const own = { evm: account.evm, solana: account.solana, sui: account.sui };
 
 const built = swapRequest({
   src: BASE,
-  dst: BASE,
+  dst: ARBITRUM,
   input: USDC,
   output: ETH,
   amount: 250_000_000n,

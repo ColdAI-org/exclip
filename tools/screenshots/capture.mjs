@@ -301,6 +301,18 @@ const SHOTS = [
     connected: true,
     ready: async (page) => {
       await page.evaluate(() => import("/src/lib/ui.ts").then((ui) => ui.openTrade("buy", "ETH")));
+      // The sheet receives on the network it pays from (Base). Receive on Arbitrum instead: one swap, two networks. The
+      // rows are looked up in the sheet, as the page behind it lists Ethereum too.
+      const sheet = page.locator(".x-sheet");
+      const row = (list, title) =>
+        sheet
+          .getByRole("list", { name: list })
+          .locator(".x-row-btn")
+          .filter({ has: page.locator(".x-row-title", { hasText: new RegExp(`^${title}$`) }) });
+      await sheet.getByRole("button", { name: /^Receive: / }).click();
+      await row("Assets", "Ethereum").click();
+      await row("Networks", "Arbitrum One").click();
+      await sheet.getByRole("button", { name: /^Receive: Ethereum on Arbitrum One\./ }).waitFor();
       await page.locator("#x-amount-input").fill("250");
       await page.locator(".x-quote-line", { hasText: "You receive about" }).waitFor();
     },
