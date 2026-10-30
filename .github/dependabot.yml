@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # pnpm workspace (package.json files and pnpm-lock.yaml).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Let a release age before proposing it, as pnpm-workspace.yaml's minimumReleaseAge does for installs.
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 10
+    groups:
+      dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Actions in .github/workflows, pinned by commit SHA with the tag in a comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
