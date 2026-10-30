@@ -80,6 +80,7 @@ processes). …
 | `fee-receivers.json: not an address: …`, `"receivers" must be an array` or `duplicate receiver` | Fix `apps/wallet/fee-receivers.json`: an array of addresses, each `0x` and 40 hex digits, each listed once. |
 | `inline <script> in index.html`, `inline style in index.html` or `external URL in index.html` | Someone edited `apps/wallet/index.html`. The wallet's CSP runs no inline code, and its page loads files only from its own origin, so put the code in `apps/wallet/src`. |
 | `index.html has an inline <script>, which the CSP (script-src 'self') blocks`, and the app's other `index.html` checks | The same for `apps/web/index.html`. |
+| `FATAL ERROR: Ineffective mark-compacts near heap limit` … `JavaScript heap out of memory` | The app's build needs about 2.6 GB of heap, and on a machine with less than 16 GB of memory Node allows about 2 GB by default. Run `NODE_OPTIONS=--max-old-space-size=4096 pnpm build`, with about 4 GB of memory free. |
 
 The wallet build also warns about two settings it accepts but that won't
 work as you meant:
