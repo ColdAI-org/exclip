@@ -49,6 +49,20 @@ processes). …
 - **For a single-process trial only**, set `server.allowMemoryStore: true`.
   A restart loses everything, wallet backups included.
 
+### The port can't be used
+
+```text
+[exclip] can't listen on port 8080: another process is using it. Stop that
+process, or set PORT to a free port.
+```
+
+Another server, often an ExClip you started earlier, already listens on
+that port. Find it with `lsof -i :8080`, then stop it, or start this one
+with `PORT` set to a free port. If it says `permission denied` instead,
+the port is probably below 1024, which usually needs extra privileges: use
+a higher port, and let the reverse proxy take 80 and 443
+([run the server](self-hosting.md#4-run-the-server)).
+
 ### A Node.js error
 
 | Error | What to do |
@@ -59,9 +73,6 @@ processes). …
 
 ### It starts, but nothing answers
 
-- **Another process holds the port.** The server doesn't report this yet:
-  it prints its start-up lines, then exits or sits idle without listening.
-  Find the other process with `lsof -i :8080`, or set `PORT`.
 - **`[exclip] warning: server.serveStatic is on but … is missing: run pnpm build`.**
   The server answers the API but has no pages to serve. Run `pnpm build`
   on that machine, or copy both `dist` folders there.

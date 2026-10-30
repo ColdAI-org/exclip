@@ -54,3 +54,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   says where each icon comes from.
 - `SECURITY.md` and the self-hosting guide no longer mention test networks:
   ExClip trades on live networks only.
+
+### Fixed
+
+- The server stops with exit code 1 and says why when it can't listen on its
+  port, such as one another process holds. It used to print its start-up
+  lines as if it were running.
