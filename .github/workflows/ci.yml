@@ -38,5 +38,9 @@ jobs:
         run: pnpm lint
       - name: Test
         run: pnpm test
+      # The web app's build needs about 2.6 GB of heap: Rollup keeps every module of the SODAX wallet SDKs (about
+      # 10,700) in memory while it bundles them. Node's default limit on this 7 GB runner is about 2 GB.
       - name: Build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm build

@@ -64,6 +64,10 @@ pnpm build
 This writes `apps/web/dist` and `apps/wallet/dist`. Each build takes only
 the public settings it needs from `exclip.config.ts`, and never a credential.
 
+The app's build needs about 4 GB of memory, and more heap than Node allows
+by default on a machine with less than 16 GB. There, build with
+`NODE_OPTIONS=--max-old-space-size=4096 pnpm build`.
+
 - A production wallet build stops if an origin isn't an exact `https`
   origin, or if the app origin shares the wallet's host.
 - It warns while the origins are still the examples, and when a partner fee
@@ -217,7 +221,7 @@ FROM node:24-slim
 WORKDIR /app
 RUN npm install --global pnpm@12.6.0
 COPY . .
-RUN pnpm install --frozen-lockfile && pnpm build
+RUN pnpm install --frozen-lockfile && NODE_OPTIONS=--max-old-space-size=4096 pnpm build
 USER node
 EXPOSE 8080
 CMD ["node", "apps/server/src/index.ts"]
