@@ -11,7 +11,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "headers": "tsx scripts/print-headers.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
