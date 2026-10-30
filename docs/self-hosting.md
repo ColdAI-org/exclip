@@ -98,7 +98,8 @@ The wallet tables hold no email addresses, IP addresses or wallet addresses.
 The shared-state tables hold rate-limit rows, which contain a client's IPv4
 address or IPv6 /64 prefix. A row stops counting after about a minute. It
 stays in the table until that client is counted again or a periodic sweep
-deletes it. In Redis, the same entries expire after about 65 seconds.
+deletes it. In Redis, a client's entries expire about 65 seconds after its
+last counted request.
 
 **Back up the `exclip_wallet_*` tables.** For a user who hasn't saved the
 recovery phrase, they are the only way back to the wallet after losing the
