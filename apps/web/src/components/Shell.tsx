@@ -80,7 +80,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
   );
 }
 
-/** Shown while the passkey wallet has neither a saved phrase nor a second passkey. Opens the popup in the click. */
+/** Shown until the passkey wallet counts as backed up (the wallet's isBackedUp). Opens the popup in the click. */
 function BackupBanner({ origin }: { origin: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
