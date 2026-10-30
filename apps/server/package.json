@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@exclip/config": "workspace:*",
-    "@simplewebauthn/server": "13.3.3",
+    "@simplewebauthn/server": "14.0.3",
     "express": "^5.1.0",
     "ioredis": "^5.10.1",
     "pg": "^8.16.3"
