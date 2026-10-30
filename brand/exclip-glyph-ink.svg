@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="12 12 40 40">
+  <title>ExClip</title>
+  <!-- The crossing alone in ink, for light backgrounds and one-colour print. -->
+  <path d="M18 18L27 27M37 37L46 46" stroke="#0B0D12" stroke-width="8"/>
+  <circle cx="18" cy="18" r="4" fill="#0B0D12"/>
+  <circle cx="46" cy="46" r="4" fill="#0B0D12"/>
+  <path d="M18 46L46 18" stroke="#0B0D12" stroke-width="8" stroke-linecap="round"/>
+</svg>

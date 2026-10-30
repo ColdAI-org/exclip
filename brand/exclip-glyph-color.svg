@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="12 12 40 40">
+  <title>ExClip</title>
+  <!-- The crossing alone, on a transparent background, in exclip-mark.svg's coordinates. Dark backgrounds only: cyan on
+       white is 2.39:1. -->
+  <path d="M18 18L27 27M37 37L46 46" stroke="#2563EB" stroke-width="8"/>
+  <circle cx="18" cy="18" r="4" fill="#2563EB"/>
+  <circle cx="46" cy="46" r="4" fill="#2563EB"/>
+  <path d="M18 46L46 18" stroke="#00B4F0" stroke-width="8" stroke-linecap="round"/>
+</svg>

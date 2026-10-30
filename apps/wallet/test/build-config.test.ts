@@ -10,7 +10,7 @@ import {
 } from "@exclip/config";
 import { loadPublicConfig } from "@exclip/config/node";
 import { FEE_RECEIVERS_FILE, assertProductionOrigins, buildWarnings, parseFeeReceivers } from "../build-guards.ts";
-import viteConfig from "../vite.config.ts";
+import viteConfig, { brandIcon } from "../vite.config.ts";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const configOf = (input: ExclipConfigInput) => resolveConfig(input).config;
@@ -131,6 +131,23 @@ test("vite.config.ts: every define from exclip.config.ts or fee-receivers.json, 
     const alias = vite.resolve?.alias as Record<string, string>;
     assert.equal(alias["hash-wasm"], fileURLToPath(new URL("../src/no-wasm.ts", import.meta.url)));
   }
+});
+
+test("the window's tab icon is brand.logo inlined as a data: URL; an https logo, which the CSP would block, gives none", async () => {
+  const page = read("../index.html");
+  const iconOf = (logo: string) => (brandIcon(logo).transformIndexHtml as unknown as (html: string) => string)(page);
+  const href = iconOf("/logo.svg").match(/<link rel="icon" href="data:image\/svg\+xml;base64,([^"]+)" \/>/)?.[1];
+  assert.ok(href, "a data: URL icon in the page");
+  assert.equal(Buffer.from(href, "base64").toString("utf8"), read("../../web/public/logo.svg"));
+  assert.equal(iconOf("https://cdn.example.com/brand/logo.svg"), page);
+  assert.throws(() => brandIcon("/no-such-logo.svg"), /apps\/web\/public\/no-such-logo\.svg doesn't exist/);
+
+  // The built page with the icon still passes the CSP guard, and the plugin is in the build.
+  const vite = await viteConfig({ command: "build", mode: "production" });
+  assert.ok((vite.plugins as Plugin[]).some((p) => p.name === "exclip-wallet-icon"));
+  const guard = (vite.plugins as Plugin[]).find((p) => p.name === "exclip-wallet-csp-guard");
+  const generate = guard?.generateBundle as unknown as (options: object, bundle: object) => void;
+  generate({}, { "index.html": { type: "asset", fileName: "index.html", source: iconOf("/logo.svg") } });
 });
 
 test("the CSP guard refuses an index.html with inline script or style, or an external URL", async () => {

@@ -6,11 +6,12 @@
  *    Development (vite serve) always uses DEV_ORIGINS: the app on http://localhost:5173, this on :5311.
  *  - Partner-fee receivers: fee-receivers.json (committed; no env).
  * A production build refuses origins that aren't exact https origins or that let the app share the wallet's rpId
- * (build-guards.ts), and warns while the origins are still the examples.
+ * (build-guards.ts), and warns while the origins are still the examples. brand.logo becomes the window's tab icon.
  *
  * Dev: http://localhost:5311, /api proxied to apps/server on :8080. `vite preview` serves the build with the production
  * security headers so the CSP can be checked locally. */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import { walletBuildConfig, walletSecurityHeaders } from "@exclip/config";
@@ -36,6 +37,25 @@ function cspGuard(): Plugin {
         if (/(?:src|href)="(?:https?:)?\/\//i.test(html)) throw new Error("external URL in index.html");
       }
     },
+  };
+}
+
+const ICON_TYPES: Record<string, string> = { ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webp": "image/webp" };
+
+/** brand.logo as the window's tab icon, inlined as a data: URL, which the CSP allows for images (img-src 'self' data:).
+ * Only a logo that is a file in apps/web/public can be inlined. An https:// logo is on another origin, which the CSP
+ * refuses, so the window then keeps the browser's default icon. */
+export function brandIcon(logo: string): Plugin {
+  const type = logo.startsWith("/") ? ICON_TYPES[extname(logo).toLowerCase()] : undefined;
+  let icon: string | undefined;
+  if (type) {
+    const file = new URL(`../web/public${logo}`, import.meta.url);
+    if (!existsSync(file)) throw new Error(`brand.logo is ${logo}, but apps/web/public${logo} doesn't exist`);
+    icon = `<link rel="icon" href="data:${type};base64,${readFileSync(file).toString("base64")}" />`;
+  }
+  return {
+    name: "exclip-wallet-icon",
+    transformIndexHtml: (html) => (icon ? html.replace(/(\s*)<\/head>/, (_, space: string) => `${space}  ${icon}${space}</head>`) : html),
   };
 }
 
@@ -71,7 +91,7 @@ export default defineConfig(async ({ command, isPreview }) => {
       __EXCLIP_OPERATOR__: JSON.stringify(wallet.operator),
       __EXCLIP_UNBACKED_LIMIT_USD__: JSON.stringify(wallet.unbackedLimitUsd),
     },
-    plugins: [cspGuard(), configWarnings(warnings)],
+    plugins: [cspGuard(), configWarnings(warnings), brandIcon(config.brand.logo)],
     // The vault's default Argon2id is WebAssembly, which the CSP doesn't allow: src/no-wasm.ts stands in for it.
     resolve: { alias: { "hash-wasm": fileURLToPath(new URL("./src/no-wasm.ts", import.meta.url)) } },
     build: {
