@@ -48,7 +48,7 @@ works only in a development build.
 | `apps/wallet` | The passkey wallet popup: plain TypeScript and Vite. `src/sodax` holds its signing policy, price checks and the networks and tokens it knows. `fee-receivers.json` is its fee allow-list |
 | `apps/server` | The server: Express 5. `src/routes` for the API, `src/services` for the SODAX proxy, market data and wallet backups, `migrations` for Postgres |
 | `packages/config` | `exclip.config.ts`: its types, defaults and checks, what each build may see, and both origins' security headers |
-| `packages/clip-wallet-core`, `packages/clip-wallet-vault` | Clip Wallet's packages, vendored under their MIT licence. Fix them upstream, not here |
+| `packages/clip-wallet-core`, `packages/clip-wallet-vault` | Clip Wallet's packages, vendored under the same Apache-2.0 licence. Fix them upstream, not here |
 | `brand` | The brand kit: hand-written SVGs and the review sheet ([brand kit](../brand/README.md)) |
 | `tools` | The scripts behind `pnpm run brand`, `pnpm run screenshots` and `pnpm run docs:links` |
 | `docs` | These pages |

@@ -2,7 +2,7 @@
   "name": "@clip-wallet/vault",
   "version": "0.1.0",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "The only Clip Wallet package that touches recovery phrases and private keys: derivation, encrypted storage, approval-bound signing, passkey unlock",
   "type": "module",
   "main": "./src/index.ts",
