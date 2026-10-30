@@ -491,8 +491,8 @@ a private key in an issue, a pull request or a test.
 ## Licence and trademarks
 
 ExClip is licensed under the [Apache License 2.0](LICENSE), © 2026 ColdAI
-LLC. The vendored Clip Wallet packages keep the MIT licence they were
-published under. [NOTICE](NOTICE) covers both.
+LLC. The vendored packages in `packages/clip-wallet-*` come from Clip
+Wallet, also under the Apache License 2.0, and [NOTICE](NOTICE) credits it.
 
 "ExClip", "Clip Wallet" and the ExClip logo are trademarks of ColdAI LLC,
 and the Apache License grants no rights to them (section 6). You may say
