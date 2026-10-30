@@ -6,7 +6,8 @@
 -- exclip_wallet_backups: ciphertext from the ClipVault passkey backup (decryptable only with the passkey's PRF
 -- output), append-only versions per credential; reads return the newest. "Delete" through the API sets retired_at;
 -- the server purges retired credentials (and, by cascade, their backups) 30 days later.
--- No emails, IP addresses or wallet addresses are stored. Additive and idempotent: new tables only.
+-- No emails, IP addresses or wallet addresses are stored. Additive and idempotent: new tables, an index and the
+-- append-only trigger.
 -- Apply BEFORE the server starts with the passkey wallet on (features.embeddedWallet): its routes read and write
 -- these tables.
 CREATE TABLE IF NOT EXISTS exclip_wallet_credentials (

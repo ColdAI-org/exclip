@@ -4,7 +4,7 @@
 --
 -- Every row expires: reads ignore expired rows at once and the server deletes them in the background. Rate-limit
 -- keys contain the client's IPv4 address or IPv6 /64 prefix and expire about a minute later; nothing from a request
--- body is stored. Additive and idempotent: new tables only.
+-- body is stored. Additive and idempotent: new tables and indexes only.
 CREATE TABLE IF NOT EXISTS exclip_kv (
   key text PRIMARY KEY,
   value text NOT NULL,
