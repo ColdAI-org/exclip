@@ -135,6 +135,8 @@ test("brand, switches and limits are validated, never passed through", () => {
   assert.equal(config.brand.termsUrl, "https://example.org/terms");
   assert.deepEqual(config.features, { trading: false, embeddedWallet: false });
   assert.equal(config.wallet.unbackedLimitUsd, 250);
+  assert.equal(walletBuildConfig(config, false).unbackedLimitUsd, 250, "the popup enforces the configured limit");
+  assert.equal(walletBuildConfig(resolveConfig().config, false).unbackedLimitUsd, 100);
 
   const problems = problemsOf({
     brand: {

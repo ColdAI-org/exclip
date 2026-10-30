@@ -404,7 +404,8 @@ export function webBuildConfig(config: ExclipConfig, dev: boolean) {
 
 export type WebBuildConfig = ReturnType<typeof webBuildConfig>;
 
-/** What apps/wallet bakes into its bundle: the one page origin it answers, its own origin and the names it shows. */
+/** What apps/wallet bakes into its bundle: the one page origin it answers, its own origin, the names it shows and the
+ * deposit limit for a wallet that isn't backed up yet (the popup enforces its own copy; the page's is only a hint). */
 export function walletBuildConfig(config: ExclipConfig, dev: boolean) {
   const origins = originsFor(config, dev);
   return {
@@ -412,6 +413,7 @@ export function walletBuildConfig(config: ExclipConfig, dev: boolean) {
     operator: config.brand.operator,
     parentOrigins: [origins.app],
     walletOrigin: origins.wallet,
+    unbackedLimitUsd: config.wallet.unbackedLimitUsd,
   };
 }
 
