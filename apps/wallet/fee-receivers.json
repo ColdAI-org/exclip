@@ -1,0 +1,4 @@
+{
+  "$comment": "Partner-fee receivers a swap intent may name, committed with the code rather than set in the environment. Must contain exclip.config.ts fees.receiver whenever fees.partnerFeeBps is above 0 (the build warns when it doesn't). Empty: the wallet refuses every swap that carries a fee (fails closed). Change only through a reviewed commit (docs/embedded-wallet.md).",
+  "receivers": []
+}

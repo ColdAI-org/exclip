@@ -232,6 +232,7 @@ test("security headers: the wallet runs only its own code and can't be framed", 
   assert.doesNotMatch(WALLET_CSP, /unsafe-(inline|eval)|wasm/);
   assert.equal(h["x-frame-options"], "DENY");
   assert.equal(h["cross-origin-opener-policy"], "unsafe-none", "the popup answers through window.opener");
+  assert.equal(h["cache-control"], "no-store", "no cache keeps an older wallet build");
   assert.match(h["permissions-policy"]!, /^publickey-credentials-get=\(self\), publickey-credentials-create=\(self\)/);
   assert.ok(h["strict-transport-security"]);
   assert.equal(walletSecurityHeaders(false)["strict-transport-security"], undefined);
