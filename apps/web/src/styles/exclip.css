@@ -415,7 +415,8 @@ body { margin: 0; }
 /* ---------- Tokenised stocks (stocks.enabled) ---------- */
 /* Small text here is text-2 or text, never text-3: at least 4.5:1 on every surface in both themes. */
 .exclip .x-stock-tag { display: inline-flex; align-items: center; flex: none; height: 20px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--x-line-strong); background: var(--x-surface-2); color: var(--x-text-2); font-size: 11px; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
-.exclip .x-stock-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Where the name and the badge don't fit on one line, the badge goes under the name rather than cut it short. */
+.exclip .x-stock-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
 .exclip .x-stock-title > .x-row-title { min-width: 0; }
 .exclip .x-review-leg .x-stock-tag { margin-top: 4px; }
 .exclip .x-stock-note { display: block; font-size: 13px; line-height: 1.5; }
