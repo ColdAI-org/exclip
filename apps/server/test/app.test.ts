@@ -152,7 +152,7 @@ test("createApp with memory stores answers /api/exclip/config: the defaults, no 
   assert.equal(r.status, 200);
   assert.deepEqual(bodyOf(r), {
     tradingEnabled: true, sodaxConfigured: false, partnerFeeBps: 0, feeReceiver: null,
-    embeddedWallet: true, walletOrigin: WALLET_ORIGIN, unbackedLimitUsd: 100,
+    embeddedWallet: true, walletOrigin: WALLET_ORIGIN, unbackedLimitUsd: 100, stocksEnabled: false, stocksTermsVersion: null,
   });
   assert.equal(r.headers["cache-control"], "public, max-age=30");
   assert.equal(r.headers["x-powered-by"], undefined);
@@ -296,13 +296,16 @@ test("defaults: no fee in /config, and a client's partnerFee (and hook) is strip
   assert.ok(!sent.body.includes(ATTACKER));
 });
 
-test("an unexpected failure answers 500 with a generic message, and its log line has the key redacted", async (t) => {
+test("an unexpected failure answers 500 with a generic message, and its log line has the key and the secrets redacted", async (t) => {
   const logs = captureConsole(t);
+  const edge = "sentinel-edge-secret-8b2f";
+  const signing = "sentinel-attestation-secret-41d6e0c9a7b35f28";
   const app = makeApp({
-    env: { SODAX_API_KEY: KEY },
+    input: { stocks: { enabled: true, countryHeader: "cf-ipcountry" } },
+    env: { SODAX_API_KEY: KEY, EXCLIP_EDGE_SECRET: edge, EXCLIP_ATTESTATION_SECRET: signing },
     fetch: upstream([], () => brokenBody()),
     // The alert sink itself failing is about the only thing left for the last-resort handler to catch.
-    onError: () => { throw new Error(`alert sink unavailable (${KEY})`); },
+    onError: () => { throw new Error(`alert sink unavailable (${KEY} ${edge} ${signing})`); },
   });
   const s = await serve(t, app);
   const r = await s.post("/api/exclip/sodax/swaps/intents/status", { intentHash: "0x01" });
@@ -312,8 +315,8 @@ test("an unexpected failure answers 500 with a generic message, and its log line
   assertNoKey(r, "500");
   const line = logs.find((l) => l.includes("POST /api/exclip/sodax/swaps/intents/status failed"));
   assert.ok(line, "the failure is logged");
-  assert.match(line, /alert sink unavailable \(\[redacted\]\)/);
-  assert.deepEqual(logs.filter((l) => l.includes(KEY)), []);
+  assert.match(line, /alert sink unavailable \(\[redacted\] \[redacted\] \[redacted\]\)/);
+  assert.deepEqual(logs.filter((l) => l.includes(KEY) || l.includes(edge) || l.includes(signing)), []);
 });
 
 // ---- serving the built apps --------------------------------------------------------------------------------

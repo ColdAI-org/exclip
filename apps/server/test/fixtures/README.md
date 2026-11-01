@@ -4,3 +4,4 @@ Real api.sodax.com/v1 responses, captured 2026-10-16. `swaps_tokens_hedera_subse
 `swaps_fees_partner_400.json` SODAX's 400 for a partner-fee request without an amount. No API key appears in any file.
 
 `web/` and `wallet/` stand in for the built apps (`apps/web/dist`, `apps/wallet/dist`) in the static-serving tests.
+`stocks.config.ts` is a configuration with tokenised stocks switched on, for the start-up tests.

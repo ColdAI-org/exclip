@@ -1,6 +1,6 @@
 /** What the server takes from exclip.config.ts, flattened once at start: the switches, the wallet limits, the origin
  * in force and the credentials. Values are never logged; only `publicConfig` reaches a browser. */
-import { originsFor, type ExclipConfig, type ExclipSecrets } from "@exclip/config";
+import { STOCKS_BASELINE_COUNTRIES, originsFor, type ExclipConfig, type ExclipSecrets } from "@exclip/config";
 
 export const SODAX_DEFAULT_BASE = "https://api.sodax.com/v1";
 export const COINGECKO_PUBLIC_BASE = "https://api.coingecko.com/api/v3";
@@ -33,6 +33,18 @@ export type ServerConfig = {
   partnerFee: PartnerFee | null;
   coingeckoBase: string;
   coingeckoKey: string | null;
+  /** stocks: tokenised stocks (services/stocks.ts). Off: any request with a stock leg answers 451 STOCKS_DISABLED. */
+  stocks: {
+    enabled: boolean;
+    /** The header the reverse proxy sets to the visitor's country code, in lower case. */
+    countryHeader: string | null;
+    /** ExClip's baseline and stocks.blockedCountries together. */
+    blockedCountries: readonly string[];
+    termsVersion: string;
+    /** Server-side only, like the SODAX key: never serialised to a client, a log line or an error. */
+    edgeSecret: string | null;
+    attestationSecret: string | null;
+  };
 };
 
 export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: boolean): ServerConfig {
@@ -50,10 +62,19 @@ export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: 
     partnerFee: config.fees.partnerFee ? { ...config.fees.partnerFee } : null,
     coingeckoBase: secrets.coingeckoApiKey ? COINGECKO_PRO_BASE : COINGECKO_PUBLIC_BASE,
     coingeckoKey: secrets.coingeckoApiKey,
+    stocks: {
+      enabled: config.stocks.enabled,
+      countryHeader: config.stocks.countryHeader,
+      blockedCountries: [...new Set([...STOCKS_BASELINE_COUNTRIES, ...config.stocks.blockedCountries])].sort(),
+      termsVersion: config.stocks.termsVersion,
+      edgeSecret: secrets.edgeSecret,
+      attestationSecret: secrets.attestationSecret,
+    },
   };
 }
 
-/** What the browser may know: switches, the fee rate and receiver it will be shown and the wallet origin, never a key. */
+/** What the browser may know: switches, the fee rate and receiver it will be shown, the wallet origin and the terms
+ * version users confirm for tokenised stocks; never a key or a secret. */
 export function publicConfig(config: ServerConfig) {
   return {
     tradingEnabled: config.tradingEnabled,
@@ -63,5 +84,7 @@ export function publicConfig(config: ServerConfig) {
     embeddedWallet: config.embeddedWallet,
     walletOrigin: config.embeddedWallet ? config.walletOrigin : null,
     unbackedLimitUsd: config.unbackedLimitUsd,
+    stocksEnabled: config.stocks.enabled,
+    stocksTermsVersion: config.stocks.enabled ? config.stocks.termsVersion : null,
   };
 }

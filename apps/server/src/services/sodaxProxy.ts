@@ -1,6 +1,8 @@
 /** SODAX key proxy. An allow-list, not a pass-through: only the routes below reach api.sodax.com, with the server's
  * x-api-key added and the partner fee pinned server-side. */
+import { STOCK_REFUSALS } from "@exclip/config";
 import type { PartnerFee, ServerConfig } from "./config.ts";
+import type { Eligibility } from "./stocks.ts";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 type Method = "GET" | "POST";
@@ -167,7 +169,9 @@ export function createSodaxProxy(options: SodaxProxyOptions) {
     return set;
   }
 
-  async function handle(method: string, path: string, query: Record<string, unknown>, body: unknown): Promise<ProxyResult> {
+  /** `stockCheck`: asked only when a leg is a tokenised stock (services/stocks.ts). Without one, stocks are refused. */
+  async function handle(method: string, path: string, query: Record<string, unknown>, body: unknown,
+    stockCheck?: () => Eligibility): Promise<ProxyResult> {
     const route = matchSodaxRoute(method, path);
     if (!route) return fail(404, "NOT_ALLOWED", "This exchange endpoint is not available.");
     if (!config.sodaxApiKey) return fail(503, "SODAX_NOT_CONFIGURED", "Trading data is unavailable: the exchange network is not configured on this server (no SODAX API key is set).");
@@ -187,14 +191,16 @@ export function createSodaxProxy(options: SodaxProxyOptions) {
       if (route.fee) outBody = pinFee(body as Record<string, unknown>, config.partnerFee);
     }
 
-    // Tokenised stocks (the tokens SODAX flags isRwa) are not offered: a request with a stock leg is refused before
-    // SODAX sees it. A token list that can't be read refuses too (fail closed), rather than letting a leg through.
+    // Tokenised stocks (the tokens SODAX flags isRwa): a request with a stock leg reaches SODAX only when the stock
+    // check passes it, and is refused with 451 and the check's reason otherwise. A token list that can't be read refuses
+    // every request with a token leg (fail closed), rather than letting a stock through unchecked.
     const legs = legsOf(route, body);
     if (legs.length) {
       const stocks = await stockTokens();
       if (!stocks) return fail(503, "TOKEN_LIST_UNAVAILABLE", "The token list could not be checked. Try again shortly.");
       if (legs.some(l => stocks.has(`${l.chainKey}|${l.address}`.toLowerCase()))) {
-        return fail(451, "STOCKS_DISABLED", "Tokenised stocks are not available here.");
+        const verdict: Eligibility = stockCheck?.() ?? { eligible: false, code: "STOCKS_DISABLED", country: null };
+        if (!verdict.eligible) return fail(451, verdict.code, STOCK_REFUSALS[verdict.code]);
       }
     }
 

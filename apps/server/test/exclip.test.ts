@@ -1,15 +1,20 @@
 /** /api/exclip: SODAX key proxy (allow-list, key handling, fee pinning, caches, 429 backoff, the trading switch and
- * the tokenised-stock refusal) and the markets empty state. Upstream fetch is stubbed; the key is fake. */
+ * the tokenised-stock checks), the stock eligibility routes and the markets empty state. Upstream fetch is stubbed;
+ * the key and the secrets are fake. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { ConfigError, PARTNER_FEE_MAX_BPS, resolveConfig, type Env, type ExclipConfigInput } from "@exclip/config";
+import {
+  ConfigError, PARTNER_FEE_MAX_BPS, STOCK_REFUSALS, STOCK_STATEMENTS, STOCKS_ATTESTATION_HEADER, STOCKS_BASELINE_COUNTRIES,
+  resolveConfig, type Env, type ExclipConfigInput,
+} from "@exclip/config";
 import { createExclipRouter } from "../src/routes/exclip.ts";
 import { serverConfig } from "../src/services/config.ts";
-import { matchSodaxRoute } from "../src/services/sodaxProxy.ts";
+import { createSodaxProxy, matchSodaxRoute } from "../src/services/sodaxProxy.ts";
+import { createStockGate } from "../src/services/stocks.ts";
 import { createMemoryWalletStore } from "../src/services/walletBackup.ts";
 import { createMemoryKv } from "../src/kv.ts";
 import { publicRateLimit } from "../src/rateLimit.ts";
@@ -35,7 +40,7 @@ const BASE: ExclipConfigInput = { fees: { partnerFeeBps: 30, receiver: RECEIVER 
 const pass: express.RequestHandler = (_req, _res, next) => next();
 
 async function serve(options: { input?: ExclipConfigInput; env?: Env; route?: (url: string, call: Call) => Reply | undefined;
-  proxyLimit?: express.RequestHandler; clock?: { t: number } } = {}) {
+  proxyLimit?: express.RequestHandler; stocksLimit?: express.RequestHandler; clock?: { t: number } } = {}) {
   const calls: Call[] = [];
   const sleeps: number[] = [];
   const clock = options.clock ?? { t: Date.UTC(2026, 9, 16, 12) };
@@ -55,6 +60,7 @@ async function serve(options: { input?: ExclipConfigInput; env?: Env; route?: (u
   app.use("/api/exclip", createExclipRouter({
     config: serverConfig(config, secrets, false), kv: createMemoryKv(), walletStore: createMemoryWalletStore(),
     fetch: fetchMock, sleep: async (ms) => { sleeps.push(ms); }, now: () => clock.t, readLimit: pass, proxyLimit: options.proxyLimit ?? pass,
+    stocksLimit: options.stocksLimit ?? pass,
   }));
   const server = app.listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
@@ -147,7 +153,7 @@ test("/config exposes flags and the fee rate, never the key", async (t) => {
   const res = await s.get("/config");
   assert.equal(res.headers.get("cache-control"), "public, max-age=30");
   assert.deepEqual(await res.json(), { tradingEnabled: false, sodaxConfigured: true, partnerFeeBps: 30, feeReceiver: RECEIVER,
-    embeddedWallet: false, walletOrigin: null, unbackedLimitUsd: 100 });
+    embeddedWallet: false, walletOrigin: null, unbackedLimitUsd: 100, stocksEnabled: false, stocksTermsVersion: null });
 });
 
 // ---- partner fee ------------------------------------------------------------------------------------------
@@ -291,7 +297,7 @@ test("with trading off, building a transaction is refused but status and cancel 
   assert.equal((await s.post("/sodax/swaps/quote", QUOTE_HBAR_BASE)).status, 200, "plain quotes work");
 });
 
-test("tokenised stocks are not offered: any quote or intent with a stock leg is refused (451) before SODAX sees it", async (t) => {
+test("tokenised stocks off (the default): any quote or intent with a stock leg is refused (451) before SODAX sees it", async (t) => {
   const s = await serve({ input: { features: { trading: true, embeddedWallet: false } } }); t.after(s.close);
   const res = await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA);
   assert.equal(res.status, 451);
@@ -314,6 +320,273 @@ test("a token list that can't be read refuses a request with token legs (fail cl
   assert.equal(res.status, 503);
   assert.equal((await json<ErrorBody>(res)).error.code, "TOKEN_LIST_UNAVAILABLE");
   assert.equal(s.calls.filter((c) => c.url.endsWith("/swaps/quote")).length, 0);
+});
+
+// ---- tokenised stocks switched on ---------------------------------------------------------------------------
+
+const EDGE = "edge-secret-for-tests-only";
+const SIGNING = "attestation-secret-for-tests-only-0123456789";
+const STOCK_ENV = { EXCLIP_EDGE_SECRET: EDGE, EXCLIP_ATTESTATION_SECRET: SIGNING };
+const ATT = STOCKS_ATTESTATION_HEADER;
+const STATEMENT_IDS = STOCK_STATEMENTS.map((s) => s.id);
+const CONFIRM = { termsVersion: "1", statements: STATEMENT_IDS };
+/** Behind a proxy that names the country in cf-ipcountry; Canada refused on top of the baseline. */
+const STOCKS = { enabled: true, countryHeader: "cf-ipcountry", blockedCountries: ["CA"] };
+/** A request as the reverse proxy passes it on from a visitor in `country`. */
+const via = (country: string, extra: Record<string, string> = {}) => ({ "cf-ipcountry": country, "x-exclip-edge-secret": EDGE, ...extra });
+type EligibilityBody = { eligible: boolean; code: string | null; message: string | null; country: string | null; termsVersion: string | null; expiresAt: string | null };
+
+function stocksOn(o: { stocks?: ExclipConfigInput["stocks"]; input?: ExclipConfigInput; env?: Env; clock?: { t: number };
+  route?: (url: string, call: Call) => Reply | undefined; stocksLimit?: express.RequestHandler } = {}) {
+  return serve({ input: { ...o.input, stocks: { ...STOCKS, ...o.stocks } }, env: { ...STOCK_ENV, ...o.env }, clock: o.clock, route: o.route, stocksLimit: o.stocksLimit });
+}
+
+/** Confirms every statement from `country` and returns the attestation the app keeps. */
+async function attestationFrom(s: Awaited<ReturnType<typeof serve>>, country = "DE"): Promise<string> {
+  const res = await s.post("/stocks/attest", CONFIRM, via(country));
+  assert.equal(res.status, 200);
+  return (await json<{ attestation: string }>(res)).attestation;
+}
+
+test("stocks off: a stock leg is refused (451 STOCKS_DISABLED) whatever the request carries, and nothing is signed", async (t) => {
+  const s = await serve({ env: STOCK_ENV }); t.after(s.close);
+  const res = await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via("DE", { [ATT]: "a.b" }));
+  assert.equal(res.status, 451);
+  assert.deepEqual(await res.json(), { error: { code: "STOCKS_DISABLED", message: "Tokenised stocks are not available here." } });
+  assert.deepEqual(await json(await s.get("/stocks/eligibility", via("DE"))), {
+    eligible: false, code: "STOCKS_DISABLED", message: "Tokenised stocks are not available here.", country: null, termsVersion: null, expiresAt: null,
+  });
+  const attest = await s.post("/stocks/attest", CONFIRM, via("DE"));
+  assert.equal(attest.status, 451);
+  assert.equal((await json<ErrorBody>(attest)).error.code, "STOCKS_DISABLED");
+
+  // EXCLIP_DISABLE_STOCKS switches off what the file switched on.
+  const braked = await stocksOn({ env: { EXCLIP_DISABLE_STOCKS: "1" } }); t.after(braked.close);
+  const quote = await braked.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via("DE"));
+  assert.equal(quote.status, 451);
+  assert.equal((await json<ErrorBody>(quote)).error.code, "STOCKS_DISABLED");
+  assert.equal((await json<{ stocksEnabled: boolean }>(await braked.get("/config"))).stocksEnabled, false);
+  assert.equal(s.calls.filter((c) => c.url.endsWith("/swaps/quote")).length + braked.calls.filter((c) => c.url.endsWith("/swaps/quote")).length, 0);
+});
+
+test("stocks on: a country counts only with the edge secret; none, a forged one or an unassigned code is COUNTRY_UNKNOWN", async (t) => {
+  const s = await stocksOn(); t.after(s.close);
+  const attestation = await attestationFrom(s, "DE");
+  const cases: Array<[string, Record<string, string>]> = [
+    ["no country header", { "x-exclip-edge-secret": EDGE }],
+    ["a country header the visitor set, without the edge secret", { "cf-ipcountry": "DE" }],
+    ["a wrong edge secret", via("DE", { "x-exclip-edge-secret": "edge-secret-guess" })],
+    ["the edge secret with more after it", via("DE", { "x-exclip-edge-secret": `${EDGE}x` })],
+    ["the edge secret sent twice", via("DE", { "x-exclip-edge-secret": `${EDGE}, ${EDGE}` })],
+    ["Cloudflare's code for unknown", via("XX")],
+    ["Cloudflare's code for Tor", via("T1")],
+    ["a name, not a code", via("Germany")],
+    ["two countries", via("DE, FR")],
+    ["an empty header", via("")],
+  ];
+  for (const [label, headers] of cases) {
+    const withAttestation = { ...headers, [ATT]: attestation };
+    const quote = await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, withAttestation);
+    assert.equal(quote.status, 451, label);
+    assert.deepEqual(await quote.json(), { error: { code: "COUNTRY_UNKNOWN", message: STOCK_REFUSALS.COUNTRY_UNKNOWN } }, label);
+    const e = await json<EligibilityBody>(await s.get("/stocks/eligibility", withAttestation));
+    assert.deepEqual([e.eligible, e.code, e.country], [false, "COUNTRY_UNKNOWN", null], label);
+    assert.equal((await s.post("/stocks/attest", CONFIRM, headers)).status, 451, label);
+  }
+  assert.equal(s.calls.filter((c) => c.url.endsWith("/swaps/quote")).length, 0, "no stock quote reached SODAX");
+});
+
+test("stocks on: the baseline and the operator's own list are COUNTRY_RESTRICTED, and nothing is signed there", async (t) => {
+  const s = await stocksOn(); t.after(s.close);
+  for (const country of [...STOCKS_BASELINE_COUNTRIES, "CA", "ca"]) {
+    const quote = await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via(country));
+    assert.equal(quote.status, 451, country);
+    assert.deepEqual(await quote.json(), { error: { code: "COUNTRY_RESTRICTED", message: STOCK_REFUSALS.COUNTRY_RESTRICTED } }, country);
+    const e = await json<EligibilityBody>(await s.get("/stocks/eligibility", via(country)));
+    assert.deepEqual([e.eligible, e.code, e.country], [false, "COUNTRY_RESTRICTED", country.toUpperCase()], country);
+    const attest = await s.post("/stocks/attest", CONFIRM, via(country));
+    assert.equal(attest.status, 451, country);
+    assert.equal((await json<ErrorBody>(attest)).error.code, "COUNTRY_RESTRICTED", country);
+  }
+  // A self-certification made elsewhere doesn't open a restricted country.
+  const fromGermany = await attestationFrom(s, "DE");
+  const res = await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via("US", { [ATT]: fromGermany }));
+  assert.equal((await json<ErrorBody>(res)).error.code, "COUNTRY_RESTRICTED");
+  // The operator's list adds to the baseline: a country on neither may go on to the statements.
+  assert.equal((await json<EligibilityBody>(await s.get("/stocks/eligibility", via("GB")))).code, "SELF_CERT_REQUIRED");
+  assert.equal(s.calls.filter((c) => c.url.endsWith("/swaps/quote")).length, 0);
+});
+
+test("stocks on: a missing, altered, expired, foreign, future or old-terms attestation is SELF_CERT_REQUIRED", async (t) => {
+  const clock = { t: Date.UTC(2026, 10, 2, 12) };
+  const s = await stocksOn({ clock }); t.after(s.close);
+  const attestation = await attestationFrom(s, "DE");
+  const [payload, signature] = attestation.split(".") as [string, string];
+  const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<string, unknown>;
+  const resigned = (changes: object) => `${Buffer.from(JSON.stringify({ ...claims, ...changes })).toString("base64url")}.${signature}`;
+  const refused = async (label: string, country: string, token?: string) => {
+    const headers = via(country, token === undefined ? {} : { [ATT]: token });
+    const quote = await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, headers);
+    assert.equal(quote.status, 451, label);
+    assert.deepEqual(await quote.json(), { error: { code: "SELF_CERT_REQUIRED", message: STOCK_REFUSALS.SELF_CERT_REQUIRED } }, label);
+    const e = await json<EligibilityBody>(await s.get("/stocks/eligibility", headers));
+    assert.deepEqual([e.eligible, e.code, e.country, e.termsVersion, e.expiresAt], [false, "SELF_CERT_REQUIRED", country, "1", null], label);
+  };
+  await refused("none", "DE");
+  await refused("made in another country", "FR", attestation);
+  await refused("its country changed", "FR", resigned({ c: "FR" }));
+  await refused("its date moved on", "DE", resigned({ iat: Number(claims.iat) + 86_400 }));
+  await refused("its terms changed", "DE", resigned({ t: "2" }));
+  await refused("another signature", "DE", `${payload}.${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`);
+  await refused("no signature", "DE", payload);
+  await refused("a third part", "DE", `${attestation}.x`);
+  await refused("not an attestation", "DE", "not an attestation");
+  await refused("too long", "DE", `${attestation}${"A".repeat(600)}`);
+
+  // Signed by another deployment (another secret), or under terms this server has moved on from.
+  const other = await stocksOn({ clock, env: { EXCLIP_ATTESTATION_SECRET: "another-deployments-secret-0123456789abcdef" } }); t.after(other.close);
+  await refused("another deployment's", "DE", await attestationFrom(other, "DE"));
+  const newTerms = await stocksOn({ clock, stocks: { termsVersion: "2" } }); t.after(newTerms.close);
+  const old = await newTerms.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via("DE", { [ATT]: attestation }));
+  assert.equal((await json<ErrorBody>(old)).error.code, "SELF_CERT_REQUIRED", "terms version 1 under terms version 2");
+  const stale = await newTerms.post("/stocks/attest", CONFIRM, via("DE"));
+  assert.equal(stale.status, 409);
+  assert.equal((await json<ErrorBody>(stale)).error.code, "TERMS_CHANGED");
+
+  // Dated ahead: a few minutes (another server's clock) count, an hour doesn't.
+  const ahead = { t: clock.t + 4 * 60_000 };
+  const soon = await stocksOn({ clock: ahead }); t.after(soon.close);
+  assert.equal((await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via("DE", { [ATT]: await attestationFrom(soon) }))).status, 200);
+  ahead.t = clock.t + 60 * 60_000;
+  await refused("dated an hour ahead", "DE", await attestationFrom(soon));
+
+  // Thirty days: the last second counts, the next doesn't.
+  clock.t += 30 * 86_400_000 - 1000;
+  assert.equal((await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via("DE", { [ATT]: attestation }))).status, 200);
+  clock.t += 1000;
+  await refused("30 days old", "DE", attestation);
+});
+
+test("stocks on: a valid attestation lets a stock leg through to SODAX, and nothing of the check travels upstream", async (t) => {
+  const s = await stocksOn({ input: { features: { trading: true, embeddedWallet: false } } }); t.after(s.close);
+  const attest = await s.post("/stocks/attest", { termsVersion: "1", statements: [...STATEMENT_IDS].reverse() }, via("DE"));
+  assert.equal(attest.status, 200);
+  assert.equal(attest.headers.get("cache-control"), "no-store");
+  const issued = await json<{ attestation: string; country: string; termsVersion: string; expiresAt: string }>(attest);
+  assert.deepEqual({ ...issued, attestation: "" }, { attestation: "", country: "DE", termsVersion: "1", expiresAt: "2026-11-15T12:00:00.000Z" });
+  assert.match(issued.attestation, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/);
+  assert.deepEqual(JSON.parse(Buffer.from(issued.attestation.split(".")[0]!, "base64url").toString("utf8")),
+    { v: 1, t: "1", c: "DE", iat: Date.UTC(2026, 9, 16, 12) / 1000 });
+
+  const headers = via("DE", { [ATT]: issued.attestation });
+  const e = await s.get("/stocks/eligibility", headers);
+  assert.equal(e.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await e.json(), { eligible: true, code: null, message: null, country: "DE", termsVersion: "1", expiresAt: "2026-11-15T12:00:00.000Z" });
+
+  const quote = await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, headers);
+  assert.equal(quote.status, 200);
+  assert.deepEqual(await quote.json(), { quotedAmount: "42943543" });
+  assert.equal((await s.post("/sodax/swaps/quote", QUOTE_USDC_NVDA, via("de", { [ATT]: issued.attestation }))).status, 200, "the proxy's case doesn't matter");
+  const intent = { srcChainKey: "hedera", inputToken: HEDERA_USDC, dstChainKey: "hedera", outputToken: HEDERA_AAPL,
+    inputAmount: "50000000", minOutputAmount: "1", deadline: "1800000300", allowPartialFill: false };
+  assert.equal((await s.post("/sodax/swaps/intents", intent, headers)).status, 200);
+
+  const upstream = s.calls.filter((c) => !c.url.endsWith("/swaps/tokens"));
+  assert.equal(upstream.length, 3);
+  for (const call of upstream) {
+    assert.deepEqual(Object.keys(call.headers).sort(), ["accept", "content-type", "x-api-key"], call.url);
+    for (const secret of [EDGE, SIGNING, issued.attestation]) assert.ok(!JSON.stringify(call).includes(secret), call.url);
+  }
+});
+
+test("stocks: the confirmation needs every statement, for the current terms, and nothing else", async (t) => {
+  const s = await stocksOn(); t.after(s.close);
+  const bad: Array<[string, unknown, number, string]> = [
+    ["three statements", { termsVersion: "1", statements: STATEMENT_IDS.slice(1) }, 400, "STATEMENTS_REQUIRED"],
+    ["one of them twice", { termsVersion: "1", statements: [...STATEMENT_IDS.slice(1), STATEMENT_IDS[1]] }, 400, "STATEMENTS_REQUIRED"],
+    ["one that doesn't exist", { termsVersion: "1", statements: [...STATEMENT_IDS.slice(1), "anything"] }, 400, "STATEMENTS_REQUIRED"],
+    ["five", { termsVersion: "1", statements: [...STATEMENT_IDS, STATEMENT_IDS[0]] }, 400, "STATEMENTS_REQUIRED"],
+    ["not a list", { termsVersion: "1", statements: STATEMENT_IDS.join(",") }, 400, "STATEMENTS_REQUIRED"],
+    ["no statements", { termsVersion: "1" }, 400, "STATEMENTS_REQUIRED"],
+    ["no terms version", { statements: STATEMENT_IDS }, 400, "BAD_BODY"],
+    ["a field more", { ...CONFIRM, country: "FR" }, 400, "BAD_BODY"],
+    ["a list", [CONFIRM], 400, "BAD_BODY"],
+    ["other terms", { ...CONFIRM, termsVersion: "0" }, 409, "TERMS_CHANGED"],
+  ];
+  for (const [label, body, status, code] of bad) {
+    const res = await s.post("/stocks/attest", body, via("DE"));
+    assert.equal(res.status, status, label);
+    assert.equal((await json<ErrorBody>(res)).error.code, code, label);
+  }
+  // The answers carry no secret.
+  const all = JSON.stringify(await json(await s.post("/stocks/attest", CONFIRM, via("DE")))) + JSON.stringify(await json(await s.get("/config")));
+  for (const secret of [EDGE, SIGNING]) assert.ok(!all.includes(secret));
+});
+
+test("stocks in every state: a crypto-only swap is untouched, and the stock check isn't even asked", async (t) => {
+  const on = await stocksOn({ input: { features: { trading: true, embeddedWallet: false } } }); t.after(on.close);
+  const off = await serve({ input: { features: { trading: true, embeddedWallet: false } }, env: STOCK_ENV }); t.after(off.close);
+  const attestation = await attestationFrom(on, "DE");
+  const states: Array<[string, typeof on, Record<string, string>]> = [
+    ["off", off, via("DE")],
+    ["on, no country", on, {}],
+    ["on, a country without the edge secret", on, { "cf-ipcountry": "DE" }],
+    ["on, a restricted country", on, via("US")],
+    ["on, not yet confirmed", on, via("DE")],
+    ["on, an altered attestation", on, via("DE", { [ATT]: `${attestation}x` })],
+    ["on, confirmed", on, via("DE", { [ATT]: attestation })],
+  ];
+  const intent = { srcChainKey: "hedera", inputToken: HEDERA_USDC, dstChainKey: "0x2105.base", outputToken: QUOTE_HBAR_BASE.tokenDst,
+    inputAmount: "50000000", minOutputAmount: "1", deadline: "1800000300", allowPartialFill: false };
+  for (const [label, s, headers] of states) {
+    assert.equal((await s.post("/sodax/swaps/quote", QUOTE_HBAR_BASE, headers)).status, 200, label);
+    assert.equal((await s.post("/sodax/swaps/intents", intent, headers)).status, 200, label);
+  }
+
+  // The proxy asks only about a stock leg.
+  const { config, secrets } = resolveConfig({ ...BASE, stocks: STOCKS }, { SODAX_API_KEY: FAKE_KEY, ...STOCK_ENV });
+  const proxy = createSodaxProxy({ config: serverConfig(config, secrets, false), fetch: async (url) => Response.json(url.includes("/swaps/tokens") ? TOKENS : {}) });
+  let asked = 0;
+  const ask = () => { asked++; return { eligible: false, code: "COUNTRY_RESTRICTED", country: "US" } as const; };
+  assert.equal((await proxy.handle("POST", "swaps/quote", {}, QUOTE_HBAR_BASE, ask)).status, 200);
+  assert.equal(asked, 0);
+  assert.equal((await proxy.handle("POST", "swaps/quote", {}, QUOTE_USDC_NVDA, ask)).status, 451);
+  assert.equal(asked, 1);
+});
+
+test("stocks on: a token list that can't be read refuses stock and crypto legs alike (503), even when confirmed", async (t) => {
+  const s = await stocksOn({ route: (url) => (url.endsWith("/swaps/tokens") ? { status: 500, body: { message: "down" } } : undefined) });
+  t.after(s.close);
+  const headers = via("DE", { [ATT]: await attestationFrom(s, "DE") });
+  for (const quote of [QUOTE_USDC_NVDA, QUOTE_HBAR_BASE]) {
+    const res = await s.post("/sodax/swaps/quote", quote, headers);
+    assert.equal(res.status, 503);
+    assert.equal((await json<ErrorBody>(res)).error.code, "TOKEN_LIST_UNAVAILABLE");
+  }
+  assert.equal(s.calls.filter((c) => c.url.endsWith("/swaps/quote")).length, 0);
+});
+
+test("stocks: /config says they're on and which terms apply; the routes are rate limited per IP", async (t) => {
+  const counts = new Map<string, number>();
+  const limit = publicRateLimit("exclip-test-stocks", 2, async (key) => { const n = (counts.get(key) ?? 0) + 1; counts.set(key, n); return n <= 2; });
+  const s = await stocksOn({ stocks: { termsVersion: "2026-11-01" }, stocksLimit: limit }); t.after(s.close);
+  const config = await json<{ stocksEnabled: boolean; stocksTermsVersion: string | null }>(await s.get("/config"));
+  assert.deepEqual([config.stocksEnabled, config.stocksTermsVersion], [true, "2026-11-01"]);
+
+  const ip = { "x-forwarded-for": "203.0.113.9" };
+  assert.equal((await s.get("/stocks/eligibility", via("DE", ip))).status, 200);
+  assert.equal((await s.get("/stocks/eligibility", via("DE", ip))).status, 200);
+  assert.equal((await s.post("/stocks/attest", { ...CONFIRM, termsVersion: "2026-11-01" }, via("DE", ip))).status, 429);
+  assert.equal((await s.get("/stocks/eligibility", via("DE", { "x-forwarded-for": "203.0.113.10" }))).status, 200);
+});
+
+test("stocks on without the two secrets can't be built, even by a caller that skipped the loader", () => {
+  const { config, secrets } = resolveConfig({ stocks: STOCKS }, {});
+  assert.throws(() => createStockGate(serverConfig(config, secrets, false).stocks), /EXCLIP_EDGE_SECRET/);
+  const short = resolveConfig({ stocks: STOCKS }, { ...STOCK_ENV, EXCLIP_ATTESTATION_SECRET: "x".repeat(31) });
+  assert.throws(() => createStockGate(serverConfig(short.config, short.secrets, false).stocks), /EXCLIP_ATTESTATION_SECRET/);
+  const off = resolveConfig({}, {});
+  assert.doesNotThrow(() => createStockGate(serverConfig(off.config, off.secrets, false).stocks));
 });
 
 // ---- limits, markets --------------------------------------------------------------------------------------

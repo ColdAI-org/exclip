@@ -3,6 +3,7 @@
 import express, { Router, type RequestHandler, type Response } from "express";
 import { publicConfig, type ServerConfig } from "../services/config.ts";
 import { createSodaxProxy, type FetchLike, type ProxyResult } from "../services/sodaxProxy.ts";
+import { createStockGate } from "../services/stocks.ts";
 import { createMarkets, CHART_RANGES, type ChartRange } from "../services/markets.ts";
 import type { WalletStore } from "../services/walletBackup.ts";
 import type { KvStore } from "../kv.ts";
@@ -22,6 +23,7 @@ export type ExclipRouterOptions = {
   /** Per-IP limits; default to limits in the shared KV store. */
   readLimit?: RequestHandler;
   proxyLimit?: RequestHandler;
+  stocksLimit?: RequestHandler;
   onError?: (code: string) => void;
   /** Overrides for the passkey wallet's limits in tests. */
   wallet?: Pick<WalletRouterOptions, "challengeLimit" | "writeLimit">;
@@ -36,9 +38,11 @@ export function createExclipRouter(options: ExclipRouterOptions): Router {
   const { config, kv } = options;
   const now = options.now ?? Date.now;
   const proxy = createSodaxProxy({ config, fetch: options.fetch, sleep: options.sleep, now });
+  const stocks = createStockGate(config.stocks, now);
   const markets = createMarkets({ config, fetch: options.fetch, now });
   const readLimit = options.readLimit ?? publicRateLimit("exclip-read", 240, kvRateConsume(kv));
   const proxyLimit = options.proxyLimit ?? publicRateLimit("exclip-sodax", 120, kvRateConsume(kv));
+  const stocksLimit = options.stocksLimit ?? publicRateLimit("exclip-stocks", 60, kvRateConsume(kv));
 
   const router = Router();
   router.use(express.json({ limit: EXCLIP_BODY_LIMIT }));
@@ -54,6 +58,10 @@ export function createExclipRouter(options: ExclipRouterOptions): Router {
     res.setHeader("Cache-Control", "public, max-age=30");
     res.json(publicConfig(config));
   });
+
+  // Tokenised stocks: may this visitor trade them, and the self-certification that lets them (services/stocks.ts).
+  router.get("/stocks/eligibility", stocksLimit, (req, res) => { send(res, stocks.eligibility(req.headers)); });
+  router.post("/stocks/attest", stocksLimit, (req, res) => { send(res, stocks.attest(req.headers, req.body)); });
 
   // The passkey wallet's backup API (404 while features.embeddedWallet is off).
   router.use("/wallet", createWalletRouter({ config, store: options.walletStore, kv, now, onError: options.onError, ...options.wallet }));
@@ -76,7 +84,8 @@ export function createExclipRouter(options: ExclipRouterOptions): Router {
   router.all("/sodax/*path", proxyLimit, async (req, res) => {
     const path = req.path.replace(/^\/sodax\//, "");
     try {
-      send(res, await proxy.handle(req.method, path, req.query as Record<string, unknown>, req.method === "POST" ? req.body : undefined));
+      send(res, await proxy.handle(req.method, path, req.query as Record<string, unknown>, req.method === "POST" ? req.body : undefined,
+        () => stocks.check(req.headers)));
     } catch {
       options.onError?.("EXCLIP_PROXY_FAILED");
       res.setHeader("Cache-Control", "no-store");

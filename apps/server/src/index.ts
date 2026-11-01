@@ -34,6 +34,9 @@ const notes = [
     + (config.features.embeddedWallet ? `; passkey wallet backups in ${where[plan.wallet]}` : "; passkey wallet off"),
   secrets.sodaxApiKey ? "SODAX API key: set" : "SODAX API key: not set (quotes and trading answer 503 until it is)",
   `trading ${config.features.trading ? "on" : "off"}; partner fee ${config.fees.partnerFee ? `${config.fees.partnerFee.percentage} bps` : "none"}`,
+  config.stocks.enabled
+    ? `tokenised stocks: on; country from ${config.stocks.countryHeader} with the edge secret; terms version ${config.stocks.termsVersion}`
+    : "tokenised stocks: off",
 ];
 const warnings: string[] = [];
 if (!dev && usesPlaceholderOrigins(config)) {

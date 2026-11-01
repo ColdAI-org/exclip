@@ -109,8 +109,8 @@ export function createApp(options: AppOptions): Express {
     const status = statusOf(err);
     if (status >= 500) {
       const detail = err instanceof Error ? (err.stack ?? `${err.name}: ${err.message}`) : typeof err;
-      const key = secrets.sodaxApiKey;
-      console.error(`[exclip] ${req.method} ${req.path} failed: ${key ? detail.split(key).join("[redacted]") : detail}`);
+      const hidden = [secrets.sodaxApiKey, secrets.edgeSecret, secrets.attestationSecret].filter((s): s is string => !!s);
+      console.error(`[exclip] ${req.method} ${req.path} failed: ${hidden.reduce((text, s) => text.split(s).join("[redacted]"), detail)}`);
     }
     const known = PUBLIC[status] ?? (status < 500
       ? { code: "REQUEST_FAILED", message: "The request could not be processed." }
