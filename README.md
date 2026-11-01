@@ -301,7 +301,7 @@ wallet window's tab icon when it's a file in `apps/web/public`.
 Keep text readable. Each accent colour needs a contrast ratio of at least
 4.5:1 against the surfaces it sits on, and the config checks only the
 format: [the contrast rule](docs/branding.md#the-contrast-rule) lists the
-pairs and ExClip's own ratios.
+pairs and ExClip's own ratios, and `pnpm run contrast` measures yours.
 
 Rebrand freely; keep the "Powered by ExClip" credit. It ends the footer of
 the app and of the wallet window, linked to this repository, and no setting
@@ -309,6 +309,13 @@ removes it. A copy you run for other people mustn't present itself as
 ExClip or use the ExClip logo
 ([licence and trademarks](#licence-and-trademarks)).
 [Branding](docs/branding.md) walks through a full rebrand.
+
+You can also ask a coding agent, such as Claude Code or Codex, to do it:
+"Make this my own DEX: call it Acme Swap, run by Acme Ltd, use acme.svg as
+the logo, a teal accent, and a 0.1% fee paid to 0x…".
+[`AGENTS.md`](AGENTS.md) gives the agent the steps and checks, and
+[Coding agents](docs/agents.md) shows how to review what it changed and
+what's left for you.
 
 ## How it works
 

@@ -2,9 +2,10 @@
 
 ExClip runs under your name, logo, colours and fee, all set in one file. A
 coding agent can make those changes for you from one plain-English request,
-and check them. It works with coding agents such as Claude Code and Codex,
-which read the instructions in [AGENTS.md](../AGENTS.md) at the root of the
-repository.
+and check them. It works with coding agents such as Claude Code and Codex.
+The instructions are in [AGENTS.md](../AGENTS.md) at the root of the
+repository: Codex reads that file, and Claude Code reads it through
+`CLAUDE.md`, which points to it.
 
 The agent rebrands your copy and checks it. It doesn't deploy it: your
 domains, the server, the SODAX key and your legal pages stay with you.
