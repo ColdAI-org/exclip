@@ -16,7 +16,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <a href="https://github.com/ColdAI-org/exclip/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ColdAI-org/exclip/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <img alt="Tests: 230 passing" src="https://img.shields.io/badge/tests-230%20passing-2ea043">
+  <img alt="Tests: 262 passing" src="https://img.shields.io/badge/tests-262%20passing-2ea043">
   <a href="#fees"><img alt="Fee: zero by default" src="https://img.shields.io/badge/fee-zero%20by%20default-00B4F0"></a>
   <img alt="Status: preview, not audited" src="https://img.shields.io/badge/status-preview%20%C2%B7%20not%20audited-orange">
 </p>
@@ -142,7 +142,7 @@ they were taken. `pnpm run screenshots` takes them again
   and exports as CSV.
 - **Dark and light themes**, dark by default, on phones and desktops.
 - **Switches for the operator.** One environment variable and a restart turn
-  trading or the passkey wallet off, with no rebuild.
+  trading, the passkey wallet or tokenised stocks off, with no rebuild.
 - **No tracking.** ExClip adds no analytics or telemetry, and its server
   keeps no request log.
 
@@ -214,11 +214,17 @@ value stops the server and the build, with a list of every problem.
 | `server.trustProxy` | `0` | Proxy hops to trust for the client's address, from 0 to 10 |
 | `server.serveStatic` | `false` | Serve both builds from the server, choosing by host name |
 | `server.coingeckoApiKey` | `null` | A CoinGecko Pro key. Without one, the server uses the public API |
+| `stocks.enabled` | `false` | Offer tokenised stocks. Read [tokenised stocks](#tokenised-stocks) first |
+| `stocks.countryHeader` | `null` | The header your reverse proxy sets to the visitor's country. Required when stocks are on |
+| `stocks.blockedCountries` | `[]` | Countries to refuse stocks in, on top of ExClip's baseline |
+| `stocks.termsVersion` | `"1"` | The version of what users confirm before they trade stocks. Change it, and everyone confirms again |
 
 Environment variables override the credentials and the port:
 `SODAX_API_KEY`, `DATABASE_URL`, `REDIS_URL`, `COINGECKO_API_KEY` and
-`PORT`. `EXCLIP_DISABLE_TRADING=1` and `EXCLIP_DISABLE_EMBEDDED_WALLET=1`
-switch a feature off; the environment can never switch one on.
+`PORT`. `EXCLIP_DISABLE_TRADING=1`, `EXCLIP_DISABLE_EMBEDDED_WALLET=1` and
+`EXCLIP_DISABLE_STOCKS=1` switch a feature off; the environment can never
+switch one on. Tokenised stocks need two secrets that only the environment
+holds: `EXCLIP_EDGE_SECRET` and `EXCLIP_ATTESTATION_SECRET`.
 `EXCLIP_CONFIG` names another config file.
 [Configuration](docs/configuration.md) explains each setting, and which
 changes need a rebuild.
@@ -360,6 +366,7 @@ script injected into the app page can't read the wallet's keys
 | A browser wallet's keys | That wallet | That wallet, after its own review |
 | The passkey wallet's seed | Encrypted in the wallet origin's IndexedDB, and in an encrypted backup on the server | The wallet window only, after a fresh passkey prompt |
 | The passkey | The user's device or password manager | The user. The server keeps only its public key |
+| The tokenised-stock secrets, when stocks are on | The server's memory, from `EXCLIP_EDGE_SECRET` and `EXCLIP_ATTESTATION_SECRET`. Your proxy holds the edge secret too | The server, and your proxy, which sends the edge secret with each request |
 
 **Why the SODAX key never reaches the browser.** SODAX wants an API key on
 its requests, and a key shipped in the app could be copied by anyone. So
@@ -423,7 +430,7 @@ on and off.
   and stored append-only. Each read or write needs a fresh passkey signature
   on a single-use challenge.
 
-[Security](docs/security.md) lists 22 invariants with the test that proves
+[Security](docs/security.md) lists 28 invariants with the test that proves
 each one, and the known limitations.
 
 Report a vulnerability privately, as [SECURITY.md](SECURITY.md) explains,
@@ -438,8 +445,9 @@ includes:
 - **Your own brand.** A copy you run for other people uses its own name and
   logo, and keeps the "Powered by ExClip" credit.
 - **Your own licensing and legal review**, in every place you offer it:
-  whether you may offer swaps there, your terms of use and privacy notice
-  (`brand.termsUrl` and `brand.privacyUrl`), and what charging a fee means.
+  whether you may offer swaps there (and tokenised stocks, if you switch
+  them on), your terms of use and privacy notice (`brand.termsUrl` and
+  `brand.privacyUrl`), and what charging a fee means.
 - **Running it safely:** keeping it up to date, guarding the wallet origin
   like a signing key, backing up the database, and telling people who runs
   it (`brand.operator`).
@@ -447,13 +455,38 @@ includes:
 ColdAI LLC doesn't operate your deployment, isn't a party to anything
 between you and your users, and gives no warranty (see [LICENSE](LICENSE)).
 
+## Tokenised stocks
+
+ExClip can offer the tokenised stocks SODAX lists: tokens meant to track
+the price of a company's shares. They're off by default. The app then shows
+none, and the server refuses any quote, and any request that builds a
+transaction, with a stock in it.
+
+> [!WARNING]
+> **Not legal advice.** Tokenised stocks are regulated, or banned, in many
+> countries, and the rules change. ExClip's country checks and
+> self-certification are a conservative default, not a compliance programme
+> and not legal advice. If you switch them on, you decide where and to whom
+> you offer them, and you're responsible for that decision: take advice from
+> a lawyer who knows the countries your users are in.
+
+Switching them on takes a reverse proxy that sends each visitor's country
+with a secret only it knows, two secrets in the server's environment, two
+settings (`stocks.enabled` and `stocks.countryHeader`), and a wallet
+rebuild. The server then refuses stocks to a visitor:
+
+- whose country it can't tell, which includes any request that bypasses
+  your proxy;
+- in a country of ExClip's baseline, or in one you add;
+- who hasn't read the disclosures and confirmed four statements in the app.
+
+[Tokenised stocks](docs/tokenised-stocks.md) has the steps, two untested
+proxy examples, the baseline, and what the checks can't do.
+
 ## Not included
 
 This repository is ExClip's first version: swaps only. It doesn't include:
 
-- **Tokenised stocks**, or the eligibility and attestation checks that go
-  with them. The app hides them, and the server refuses any quote or intent
-  that names one.
 - **Privacy mode.**
 - **The Earn page.**
 - **ColdAI's accounts, site shell and hosting setup.**
@@ -462,10 +495,10 @@ This repository is ExClip's first version: swaps only. It doesn't include:
 
 | Area | State |
 |---|---|
-| App | Market swaps, limit orders, asset and pair pages, and the portfolio. Live networks only: there is no test-network mode |
+| App | Market swaps, limit orders, asset and pair pages, the portfolio, and tokenised stocks when the operator switches them on. Live networks only: there is no test-network mode |
 | Passkey wallet | Market swaps, sends and receives on 14 EVM networks. No limit orders yet |
 | Server | One Node 24 process, on Postgres and optionally Redis. Serves both builds, or sits behind your own web server or CDN |
-| Tests | 230 passing: 95 in the wallet, 89 in the server, 32 in the app and 14 in the config package. CI runs them on every push to `main` and every pull request |
+| Tests | 262 passing: 102 in the wallet, 100 in the server, 42 in the app and 18 in the config package. CI runs them on every push to `main` and every pull request |
 | Security | No independent audit yet |
 | Releases | No tagged release yet. `main` is version 0.1.0 |
 

@@ -56,8 +56,35 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `AGENTS.md`, instructions for coding agents with a recipe for making
   ExClip your own DEX (`CLAUDE.md` points to it), and `docs/agents.md`,
   which shows people how to ask for that and check the result.
+- Tokenised stocks, as an operator opt-in that ships off
+  ([tokenised stocks](docs/tokenised-stocks.md)):
+  - a `stocks` block in `exclip.config.ts` (`enabled`, `countryHeader`,
+    `blockedCountries` and `termsVersion`), and the environment variables
+    `EXCLIP_EDGE_SECRET`, `EXCLIP_ATTESTATION_SECRET` and
+    `EXCLIP_DISABLE_STOCKS`. With stocks on, the server won't start without
+    both secrets;
+  - a stock check in the SODAX proxy. A request with a stock in it gets a
+    451 unless stocks are on, the visitor's country came from the reverse
+    proxy with the edge secret, the country is in neither ExClip's baseline
+    nor `stocks.blockedCountries`, and the visitor confirmed the statements
+    in the last 30 days;
+  - `GET /api/exclip/stocks/eligibility`, and `POST /api/exclip/stocks/attest`,
+    which signs a self-certification and keeps no record of it;
+  - `stocksEnabled` and `stocksTermsVersion` in `/api/exclip/config`;
+  - in the app, a Stocks screen, stocks in the trade sheet with a "Tokenised
+    stock" badge and a disclaimer, and an eligibility sheet with the
+    disclosures and four statements to confirm;
+  - in a passkey wallet built with stocks on, swaps and sends of the stocks
+    in `apps/wallet/src/sodax/stock-tokens.ts`, a table that
+    `pnpm --filter @exclip/wallet run gen:stock-tokens <file>` writes from
+    SODAX's token list.
 
 ### Changed
+
+- The SODAX proxy's stock check refused every tokenised stock with
+  `451 STOCKS_DISABLED`. It still does while stocks are off. With stocks on,
+  a refusal says why: `COUNTRY_UNKNOWN`, `COUNTRY_RESTRICTED` or
+  `SELF_CERT_REQUIRED`.
 
 - The README, rewritten: what ExClip is, screenshots, a quick start, every
   setting with its default, self-hosting, rebranding, how it works, fees,

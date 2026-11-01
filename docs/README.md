@@ -11,6 +11,7 @@
 | [The passkey wallet](wallet.md) | Know what the built-in wallet does, how to back it up and get back in, and what the server can and can't see |
 | [Embedded wallet design](embedded-wallet.md) | Review the passkey wallet in depth: its threat model, signing policy, price checks, messages and release controls |
 | [Fees](fees.md) | Know what a swap costs, how an operator's fee works, and why every part refuses a fee nobody configured |
+| [Tokenised stocks](tokenised-stocks.md) | Decide whether to offer tokenised stocks, switch them on behind a proxy that reports each visitor's country, and know what the checks can't do |
 | [Security](security.md) | See the threat model, the invariants and the test behind each one, known limitations, and how to report a problem |
 | [API](api.md) | Call the server: every route with its method, path, request, response and rate limit |
 | [Development](development.md) | Work on the code: the repository layout, scripts and tests, and how to add a network or an asset |

@@ -117,7 +117,14 @@ line, and it should say in its description why the change is needed.
   A test fails if they differ. Change both in the same commit.
 - **Security headers** in `packages/config/src/headers.ts`.
 - **The configuration rules** in `packages/config/src/index.ts`. A default
-  that charges a fee, or that relaxes origin isolation, will not be accepted.
+  that charges a fee, that switches tokenised stocks on, or that relaxes
+  origin isolation, will not be accepted.
+- **The tokenised-stock rules:** the baseline countries and the texts users
+  read and confirm, in `packages/config/src/stocks.ts`, and the stock check,
+  in `apps/server/src/services/stocks.ts`. Adding a country or tightening
+  the check needs no discussion. Taking a country off the baseline, or
+  letting through a request that was refused, needs an issue and agreement
+  first.
 
 ## Vendored code
 

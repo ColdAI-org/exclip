@@ -25,15 +25,16 @@ no enums or namespaces.
 |---|---|---|
 | `apps/server` | at start | everything, including the credentials |
 | `apps/web` | at build, and in `pnpm dev` | the brand, the app origin and the wallet origin |
-| `apps/wallet` | at build, and in `pnpm dev` | the app origin it answers, its own origin, the brand name, the operator and the deposit limit |
+| `apps/wallet` | at build, and in `pnpm dev` | the app origin it answers, its own origin, the brand name, the operator, the deposit limit and whether tokenised stocks are on |
 
 A browser bundle never gets a credential. The builds take a projection of the
 public settings (`webBuildConfig` and `walletBuildConfig`), picked field by
 field, and a test checks that no secret can reach them. After you change the
-brand, the origins or `wallet.unbackedLimitUsd`, rebuild. The fee rate, the
-switches and the backup limits need only a server restart. A new fee
-receiver also needs a change to `apps/wallet/fee-receivers.json` and a
-wallet rebuild (see [`fees`](#fees)).
+brand, the origins, `wallet.unbackedLimitUsd` or `stocks.enabled`, rebuild.
+The fee rate, the feature switches, the backup limits and the other stock
+settings need only a server restart. A new fee receiver also needs a change
+to `apps/wallet/fee-receivers.json` and a wallet rebuild (see
+[`fees`](#fees)).
 
 ## `sodax`
 
@@ -173,11 +174,33 @@ can switch them off without editing the file.
 | `server.serveStatic` | `false` | Serve the built app and wallet from this server, choosing by the request's host name. See [self-hosting](self-hosting.md). |
 | `server.coingeckoApiKey` | `null` | A CoinGecko Pro key for market data. Without one, the public API is used. `COINGECKO_API_KEY` overrides it. |
 
+## `stocks`
+
+Tokenised stocks, off unless you switch them on. Before you do, read
+[tokenised stocks](tokenised-stocks.md) and take legal advice: they are
+restricted, or banned, in many countries, and offering them is your
+decision and your responsibility.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `stocks.enabled` | `false` | Offer the tokenised stocks SODAX lists. When it is on, the server won't start without `EXCLIP_EDGE_SECRET`, and an `EXCLIP_ATTESTATION_SECRET` of at least 32 characters. |
+| `stocks.countryHeader` | `null` | The header your reverse proxy sets to the visitor's country code, such as `cf-ipcountry`: letters, digits and single hyphens. It is required when stocks are on, and it counts only on a request that also carries the edge secret. |
+| `stocks.blockedCountries` | `[]` | Countries to refuse on top of [ExClip's baseline](tokenised-stocks.md#exclips-baseline), as ISO 3166-1 alpha-2 codes such as `"GB"`. Nothing removes a country from the baseline. |
+| `stocks.termsVersion` | `"1"` | The version of what users confirm: 1 to 32 letters, digits, dots, hyphens or underscores. Change it, and everyone confirms again. |
+
+The server reads these at start. The app needs no rebuild, because it
+learns whether stocks are on from `/api/exclip/config`. The passkey wallet
+reads `stocks.enabled` when it is built, so rebuild it after you switch
+stocks on or off. `EXCLIP_DISABLE_STOCKS` switches them off without editing
+the file.
+
 ## Environment variables
 
-Environment variables override the file for credentials and the port. Two
-of them switch features off. They can never switch anything on, so they work
-as an emergency brake that needs no code change. Empty values are ignored.
+Environment variables override the file for credentials and the port. They
+also hold the two secrets that tokenised stocks need, which the file has no
+setting for. Three of them switch features off. They can never switch
+anything on, so they work as an emergency brake that needs no code change.
+Empty values are ignored.
 
 | Variable | Overrides | Notes |
 |---|---|---|
@@ -188,4 +211,7 @@ as an emergency brake that needs no code change. Empty values are ignored.
 | `PORT` | `server.port` | |
 | `EXCLIP_DISABLE_TRADING` | `features.trading` | `1`, `true`, `on` or `yes` switches trading off. |
 | `EXCLIP_DISABLE_EMBEDDED_WALLET` | `features.embeddedWallet` | `1`, `true`, `on` or `yes` switches the wallet off. |
+| `EXCLIP_DISABLE_STOCKS` | `stocks.enabled` | `1`, `true`, `on` or `yes` switches tokenised stocks off. The passkey wallet reads it when it is built. |
+| `EXCLIP_EDGE_SECRET` | | Required when stocks are on: what your reverse proxy sends in `x-exclip-edge-secret`, so that its country header can be trusted. |
+| `EXCLIP_ATTESTATION_SECRET` | | Required when stocks are on, at least 32 characters: the key that signs users' self-certifications. Only the server needs it. |
 | `EXCLIP_CONFIG` | | Path of a config file to read instead of `exclip.config.ts`, relative to the repository root. The server refuses to start if that file doesn't exist. |

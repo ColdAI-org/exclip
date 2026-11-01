@@ -21,9 +21,10 @@ itself.
 | Clip Wallet | `packages/clip-wallet-vault`, `packages/clip-wallet-core` | Clip Wallet's vault and key code, vendored | Inside the wallet popup |
 
 The app has four screens: home (`/`), an asset (`/asset/ETH`), a pair
-(`/trade/BTC-USDC`) and the portfolio (`/portfolio`). Trading, sending,
-receiving and connecting a wallet open as sheets over whichever screen is
-showing.
+(`/trade/BTC-USDC`) and the portfolio (`/portfolio`). When the operator
+switches tokenised stocks on, a fifth lists them (`/stocks`). Trading,
+sending, receiving and connecting a wallet open as sheets over whichever
+screen is showing.
 
 ## How the parts talk
 
@@ -118,12 +119,13 @@ off, but it can't point the app at another wallet.
 | A browser wallet's keys | The wallet extension or app | That wallet. ExClip asks it to sign, and it shows its own review |
 | The passkey wallet's seed | Encrypted in IndexedDB on the wallet origin, plus an encrypted backup on the server | The popup only, after a fresh passkey prompt, one request at a time |
 | The passkey itself | The user's device or password manager | The user. The server stores only its public key |
+| The tokenised-stock secrets, when stocks are on | The server's environment, `EXCLIP_EDGE_SECRET` and `EXCLIP_ATTESTATION_SECRET`. Your reverse proxy holds the edge secret too | The server, to trust the country header and to sign self-certifications. The proxy only sends the edge secret ([tokenised stocks](tokenised-stocks.md#the-reverse-proxy)) |
 
 The app holds no secret at all. Its build gets a projection of the config,
 picked field by field (the brand and the two origins). The wallet's build
 gets the app origin it answers, its own origin, the brand name, the
-operator and the deposit limit. A test checks that no secret can reach
-either bundle.
+operator, the deposit limit and whether tokenised stocks are on. A test
+checks that no secret can reach either bundle.
 
 ## Why the SODAX key never reaches the browser
 
@@ -146,7 +148,9 @@ Four tests named "SODAX key 1/4" to "SODAX key 4/4" in
 
 The same proxy is where the operator's settings are enforced. It pins the
 configured partner fee on every quote and intent and drops any fee the
-browser sends ([fees](fees.md)). It refuses tokenised stocks. It refuses to
+browser sends ([fees](fees.md)). It refuses tokenised stocks, unless the
+operator has switched them on and the visitor passes the stock check
+([tokenised stocks](tokenised-stocks.md#who-may-trade-them)). It refuses to
 build trades while trading is switched off. The cost of this design is that
 the proxy is public: anyone can call the allowed routes with your key,
 within the rate limits ([known limitations](security.md#known-limitations)).
@@ -174,6 +178,7 @@ The server writes no request log ([self-hosting](self-hosting.md#monitoring)).
 | Trade history (`exclip.activity.v1`) | The app origin's `localStorage` | Up to 500 entries. Never sent to the server. The portfolio exports it as CSV |
 | Theme, and whether to reconnect a browser wallet | The app origin's `localStorage` | |
 | The passkey wallet session | The app origin's `sessionStorage` | The wallet's address and whether it's backed up. Gone when the tab closes |
+| The tokenised-stock self-certification (`exclip.stocks.attestation`) | The app origin's `localStorage` | Only where stocks are on. Signed by the server, valid for 30 days, and sent only to the SODAX proxy and the stock routes |
 | The passkey wallet's vault | The wallet origin's IndexedDB | Encrypted. The app can't read it |
 
 Browser wallets and their connectors may keep their own data too.

@@ -112,7 +112,7 @@ fills allowed.
 | **Deadline** | When an unfilled intent stops being valid |
 | **Partner fee** | An optional fee the operator takes from each swap, up to 1 %. It's zero unless the operator sets one ([fees](fees.md)) |
 | **Network fee** | The gas your wallet pays on the source network, in that network's own coin. It goes to the network, not to ExClip |
-| **Tokenised stocks** | Real-world-asset tokens that SODAX lists. ExClip doesn't offer them: the app hides them, and the server refuses any quote or intent that names one |
+| **Tokenised stocks** | Tokens meant to track the price of a company's shares, which SODAX lists as real-world assets. They're off unless the operator switches them on, and even then refused in some countries ([tokenised stocks](tokenised-stocks.md)) |
 | **Browser wallet** | A wallet you already use, such as an extension or Clip Wallet. ExClip connects nine families: EVM, Solana, Sui, Bitcoin, Stellar, NEAR, Injective, Stacks and ICON |
 | **Passkey wallet** | The optional wallet built into ExClip, unlocked with a passkey. It runs on its own origin ([the passkey wallet](wallet.md)) |
 | **App origin, wallet origin** | The two web addresses a deployment uses, for example `https://exclip.example.com` and `https://wallet.example.com`. Keeping them apart is what protects the passkey wallet |

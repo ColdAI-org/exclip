@@ -37,6 +37,7 @@ shares a single "unknown" budget.
 |---|---|---|---|
 | `exclip-read` | `GET /config`, `GET /markets`, `GET /markets/:symbol/chart` | 240 | admitted (fail open) |
 | `exclip-sodax` | everything under `/sodax/` | 120 | admitted (fail open) |
+| `exclip-stocks` | `GET /stocks/eligibility`, `POST /stocks/attest` | 60 | admitted (fail open) |
 | `exclip-wallet-challenge` | `POST /wallet/challenge` | 30 | refused (fail closed) |
 | `exclip-wallet-write` | the other four `/wallet/` routes | 20 | refused (fail closed) |
 
@@ -67,6 +68,8 @@ client's address. Rate limits count per address, so behind a proxy set
 | `GET` | [`/api/exclip/markets`](#get-markets) | read | Reference prices for every listed asset |
 | `GET` | [`/api/exclip/markets/:symbol/chart`](#get-marketssymbolchart) | read | A price chart for one asset |
 | `GET`, `POST` | [`/api/exclip/sodax/*`](#sodax) | sodax | The SODAX API, through an allow-list, with the key added |
+| `GET` | [`/api/exclip/stocks/eligibility`](#get-stockseligibility) | stocks | Whether this visitor may trade tokenised stocks, and if not, why |
+| `POST` | [`/api/exclip/stocks/attest`](#post-stocksattest) | stocks | Confirm the statements, for a signed self-certification |
 | `POST` | [`/api/exclip/wallet/challenge`](#post-walletchallenge) | challenge | A one-time WebAuthn challenge |
 | `POST` | [`/api/exclip/wallet/credentials`](#post-walletcredentials) | write | Register a passkey and store its first backup |
 | `POST` | [`/api/exclip/wallet/backup/fetch`](#post-walletbackupfetch) | write | Read a passkey's backups |
@@ -85,7 +88,9 @@ What the app reads when it starts. It never carries a key.
   "feeReceiver": null,
   "embeddedWallet": true,
   "walletOrigin": "https://wallet.example.org",
-  "unbackedLimitUsd": 100
+  "unbackedLimitUsd": 100,
+  "stocksEnabled": false,
+  "stocksTermsVersion": null
 }
 ```
 
@@ -98,6 +103,8 @@ What the app reads when it starts. It never carries a key.
 | `embeddedWallet` | `features.embeddedWallet`. |
 | `walletOrigin` | The wallet origin, or `null` when the wallet is off. The app only uses it as an on/off switch: the origin it trusts is fixed in its build. |
 | `unbackedLimitUsd` | `wallet.unbackedLimitUsd`. |
+| `stocksEnabled` | `stocks.enabled`, after `EXCLIP_DISABLE_STOCKS`. When false, the app names and offers no tokenised stock. |
+| `stocksTermsVersion` | `stocks.termsVersion`, the terms users confirm before trading stocks, or `null` while stocks are off. |
 
 `Cache-Control: public, max-age=30`.
 
@@ -217,10 +224,13 @@ What the server does with each request, in order:
    `hook` the browser sent, then adds the configured fee, if there is one.
    See [fees](fees.md).
 6. **Tokenised stocks.** On the routes marked "stock check", the server
-   looks up both tokens in SODAX's token list. A token SODAX flags as a
-   real-world asset answers `451 STOCKS_DISABLED`. If the list can't be read,
-   the request is refused with `503 TOKEN_LIST_UNAVAILABLE` rather than let
-   through.
+   looks up both tokens in SODAX's token list, which it reads at most every
+   5 minutes. When either is a token SODAX flags as a real-world asset
+   (`isRwa`), the request goes on only if the stock check lets this visitor
+   trade tokenised stocks. Otherwise it answers `451` with the check's
+   reason ([tokenised stocks](#tokenised-stocks)). If the list can't be
+   read, any request with a token in it is refused with
+   `503 TOKEN_LIST_UNAVAILABLE` rather than let through.
 7. **Upstream.** The request goes to SODAX with a 15-second timeout. Up to
    four attempts in all, with backoff: a `429` and SODAX's "API key
    verification is temporarily unavailable" `503` are always retried; a
@@ -241,7 +251,10 @@ Errors the proxy adds:
 | 403 | `TRADING_DISABLED` | Building a transaction while trading is off |
 | 404 | `NOT_ALLOWED` | A path or method not in the allow-list |
 | 429 | `SODAX_RATE_LIMITED` | SODAX kept answering 429 (`Retry-After: 5`) |
-| 451 | `STOCKS_DISABLED` | A leg is a tokenised stock |
+| 451 | `STOCKS_DISABLED` | A leg is a tokenised stock, and stocks are off |
+| 451 | `COUNTRY_UNKNOWN` | A leg is a tokenised stock, and there's no country the server can trust |
+| 451 | `COUNTRY_RESTRICTED` | A leg is a tokenised stock, and the visitor's country is refused |
+| 451 | `SELF_CERT_REQUIRED` | A leg is a tokenised stock, and there's no valid self-certification |
 | 502 | `SODAX_UNREACHABLE` | SODAX couldn't be reached |
 | 502 | `SODAX_BAD_RESPONSE` | SODAX answered with something that isn't JSON |
 | 502 | `SODAX_UPSTREAM` | SODAX answered 5xx after the retries, or the proxy failed |
@@ -251,6 +264,83 @@ Errors the proxy adds:
 
 A SODAX `4xx`, such as a quote it can't fill, comes back with SODAX's own
 status and body.
+
+## Tokenised stocks
+
+These two routes serve the stock check, which decides whether a visitor may
+trade tokenised stocks. [Tokenised stocks](tokenised-stocks.md) explains the
+rules; this section is the wire format. Both routes answer with
+`Cache-Control: no-store`.
+
+The check reads three request headers:
+
+| Header | Set by | Meaning |
+|---|---|---|
+| `stocks.countryHeader`, such as `cf-ipcountry` | your reverse proxy | The visitor's country, as an ISO 3166-1 alpha-2 code |
+| `x-exclip-edge-secret` | your reverse proxy | `EXCLIP_EDGE_SECRET`. Without it, the country header counts for nothing. |
+| `x-exclip-stocks-attestation` | the app | The self-certification from `POST /stocks/attest`, up to 512 characters |
+
+The app sends the attestation on these two routes and on `/sodax/*`, and
+nowhere else. The proxy never forwards any of the three headers to SODAX.
+
+### `GET /stocks/eligibility`
+
+Whether this request may trade a tokenised stock. It always answers `200`:
+
+```json
+{
+  "eligible": false,
+  "code": "SELF_CERT_REQUIRED",
+  "message": "Read the disclosures and confirm the statements before you trade tokenised stocks.",
+  "country": "DE",
+  "termsVersion": "2026-11-01",
+  "expiresAt": null
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `eligible` | Whether a quote or intent with a stock leg would go through. |
+| `code`, `message` | When it wouldn't, the `451` code and message the proxy would answer with ([refusals](tokenised-stocks.md#refusals)). Otherwise `null`. |
+| `country` | The country the server trusts for this request, or `null`. |
+| `termsVersion` | `stocks.termsVersion`, or `null` while stocks are off. |
+| `expiresAt` | When `eligible` is true, the time the attestation expires (ISO 8601). Otherwise `null`. |
+
+### `POST /stocks/attest`
+
+The user confirms the statements:
+
+```json
+{ "termsVersion": "2026-11-01", "statements": ["not-us-person", "permitted", "risks", "own-decision"] }
+```
+
+`termsVersion` must be the current one. `statements` must hold the four
+ids, each once, and the body no other key. The answer:
+
+```json
+{
+  "attestation": "<payload>.<signature>",
+  "country": "DE",
+  "termsVersion": "2026-11-01",
+  "expiresAt": "2026-12-02T09:30:00.000Z"
+}
+```
+
+The payload is base64url JSON: a format version (`1`), the terms version,
+the country and the time of issue in Unix seconds. The signature is
+base64url HMAC-SHA256 under `EXCLIP_ATTESTATION_SECRET`, over the payload and
+a digest of the statements' wording. The attestation counts for 30 days,
+for that country and those terms, on any server with the same secret. The
+server keeps no copy.
+
+The country checks come first, then the body:
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `BAD_BODY` | The body isn't a JSON object with a string `termsVersion`, or it has another key |
+| 400 | `STATEMENTS_REQUIRED` | `statements` isn't exactly the four ids |
+| 409 | `TERMS_CHANGED` | `termsVersion` isn't the current one. The app fetches the new terms. |
+| 451 | `STOCKS_DISABLED`, `COUNTRY_UNKNOWN` or `COUNTRY_RESTRICTED` | As in the check |
 
 ## The passkey wallet's routes
 

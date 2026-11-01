@@ -139,13 +139,15 @@ SODAX_API_KEY=… DATABASE_URL=… pnpm start
 `pnpm start` runs `apps/server` in production mode. At start the server:
 
 1. reads and checks `exclip.config.ts` (or the file named by
-   `EXCLIP_CONFIG`), and stops with a list of problems if it isn't valid;
+   `EXCLIP_CONFIG`), and stops with a list of problems if it isn't valid,
+   or if tokenised stocks are on without their two secrets;
 2. chooses its storage, and stops if production would run on memory. It
    doesn't connect to Postgres or Redis, or check the migrations, before it
    listens (the [smoke checks](#smoke-checks) cover that);
 3. listens on `server.port` (`PORT`), and stops if it can't, say because
    another process holds the port. Then it logs what it runs with: the
-   storage, whether the SODAX key is set, trading on or off, and the fee.
+   storage, whether the SODAX key is set, trading on or off, the fee, and
+   whether tokenised stocks are on.
 
 Without a SODAX key the server still starts. It answers `/config` and market
 data, and SODAX requests answer 503 until a key is set.
@@ -201,8 +203,10 @@ WantedBy=multi-user.target
 - `ExecStart` must point at Node 24. `command -v node` prints the path.
   `node apps/server/src/index.ts` is what `pnpm start` runs.
 - `/etc/exclip/env` holds the credentials, one `NAME=value` per line
-  (`SODAX_API_KEY`, `DATABASE_URL`, `REDIS_URL`). Make it readable by root
-  only: systemd reads it before it switches to the `exclip` user.
+  (`SODAX_API_KEY`, `DATABASE_URL`, `REDIS_URL`, and with tokenised stocks
+  on, `EXCLIP_EDGE_SECRET` and `EXCLIP_ATTESTATION_SECRET`). Make it
+  readable by root only: systemd reads it before it switches to the
+  `exclip` user.
 - systemd stops the server with `SIGTERM`, and `TimeoutStopSec` leaves room
   for its 10-second drain.
 
@@ -248,7 +252,9 @@ docker run -d --name exclip --restart unless-stopped \
 ```
 
 `-e NAME` with no value passes the variable on from your shell, so the key
-stays out of your shell history. The image holds the wallet's build, so build
+stays out of your shell history. With tokenised stocks on, add
+`-e EXCLIP_EDGE_SECRET -e EXCLIP_ATTESTATION_SECRET`. The image holds the
+wallet's build, so build
 it in CI from a reviewed commit, as you would the wallet
 ([release controls](embedded-wallet.md#release-controls)).
 
@@ -399,6 +405,11 @@ EXCLIP_DISABLE_TRADING=1 EXCLIP_DISABLE_EMBEDDED_WALLET=1
    - the review shows the fee you configured (none by default);
    - the popup's review lists only the network fee;
    - the status reaches done and the funds arrive.
+4. **Tokenised stocks, if you offer them.** If `stocks.enabled` is on, keep
+   `EXCLIP_DISABLE_STOCKS=1` through the steps above. Once trading works,
+   remove it, restart, and at once
+   [check the proxy](tokenised-stocks.md#check-the-proxy). If a check
+   fails, set the variable again and restart.
 
 ## Smoke checks
 
@@ -412,7 +423,7 @@ curl -s https://swap.example.org/api/exclip/config
 The answer holds public settings only:
 
 ```json
-{"tradingEnabled":true,"sodaxConfigured":true,"partnerFeeBps":0,"feeReceiver":null,"embeddedWallet":true,"walletOrigin":"https://wallet.example.org","unbackedLimitUsd":100}
+{"tradingEnabled":true,"sodaxConfigured":true,"partnerFeeBps":0,"feeReceiver":null,"embeddedWallet":true,"walletOrigin":"https://wallet.example.org","unbackedLimitUsd":100,"stocksEnabled":false,"stocksTermsVersion":null}
 ```
 
 - `sodaxConfigured` must be `true`.
@@ -420,6 +431,9 @@ The answer holds public settings only:
   `null` unless you set a fee.
 - `walletOrigin` must be your wallet origin, or `null` while the wallet is
   switched off.
+- `stocksEnabled` must be `false` unless you switched tokenised stocks on.
+  When they're on, `stocksTermsVersion` is your `stocks.termsVersion`, and
+  [check the proxy](tokenised-stocks.md#check-the-proxy) too.
 - The answer must never contain your SODAX key.
 
 ```sh
@@ -454,16 +468,21 @@ origin isn't serving what you built: treat it as an incident (see
 Use the switches first, narrowest first. Each needs a restart of the server,
 and no rebuild.
 
-1. **Trading off.** Set `EXCLIP_DISABLE_TRADING=1` and restart. Every route
+1. **Tokenised stocks off**, if you offer them. Set
+   `EXCLIP_DISABLE_STOCKS=1` and restart. Every request with a stock in it
+   answers `451 STOCKS_DISABLED`, and the app hides the Stocks screen.
+   People keep the stocks they hold
+   ([switching them off](tokenised-stocks.md#switching-them-off)).
+2. **Trading off.** Set `EXCLIP_DISABLE_TRADING=1` and restart. Every route
    that builds a transaction answers 403. Quotes, status, submit and cancel
    keep working, so trades already signed can finish and be followed.
-2. **The passkey wallet off.** Set `EXCLIP_DISABLE_EMBEDDED_WALLET=1` and
+3. **The passkey wallet off.** Set `EXCLIP_DISABLE_EMBEDDED_WALLET=1` and
    restart. The app stops offering the passkey wallet, and its backup API
    answers 404. While it is off, people can't reach funds in their passkey
    wallet through your app; their recovery phrase still works in another
    wallet. Keep this step for a problem with the wallet, and switch trading
    off first.
-3. **An earlier release.** Deploy the previous server and builds. Deploy a
+4. **An earlier release.** Deploy the previous server and builds. Deploy a
    previous wallet build only if you know it is good, from its recorded
    hashes.
 

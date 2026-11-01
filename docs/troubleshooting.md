@@ -27,6 +27,8 @@ start again. `pnpm build` runs the same checks and stops on the same lines.
 | `origins.wallet needs a host of its own: …` | Put the wallet on a host that the app isn't on or under, such as `wallet.example.org` beside `example.org` ([origins](configuration.md#origins)). |
 | `fees.receiver is required when fees.partnerFeeBps is above 0` | Set the receiver, or set the fee back to `0` ([turn a fee on](fees.md#turn-a-fee-on)). |
 | `… must be a #RRGGBB colour`, `… must be an https URL or null` and the like | The message gives the format. [Configuration](configuration.md) lists each setting. |
+| `stocks.countryHeader is required when stocks.enabled is true: …` | Set the header your reverse proxy puts the visitor's country in ([the reverse proxy](tokenised-stocks.md#the-reverse-proxy)), or set `stocks.enabled: false`. |
+| `EXCLIP_EDGE_SECRET is required when stocks.enabled is true: …` or `EXCLIP_ATTESTATION_SECRET must be at least 32 characters …` | Put both secrets in the server's environment ([switching them on](tokenised-stocks.md#switching-them-on)), or set `stocks.enabled: false`. Only the server checks these; the build doesn't need them. |
 | `EXCLIP_CONFIG names …, which does not exist` | The path is relative to the repository root, not to the folder you're in. |
 | `… must \`export default\` the configuration` | Keep the example's `export default {` at the top of the settings. |
 
@@ -122,6 +124,10 @@ The app turns the server's errors into short messages:
 | "Too many requests. Try again shortly." | ExClip's own rate limit for this client ([rate limits](api.md#rate-limits)). | If many people see it at once, check `server.trustProxy` ([behind a proxy](#behind-a-proxy-or-cdn)). |
 | "The exchange network had a problem. Try again." | Any other `5xx`. Usually SODAX failed or didn't answer (502 `SODAX_UPSTREAM`). | Check the server's log ([monitoring](self-hosting.md#monitoring)). |
 | "Something went wrong. Try again." | An answer that isn't the server's, such as an HTML error page. | Check that `/api/exclip/*` on the app's host reaches the server ([serve the two origins](self-hosting.md#5-serve-the-two-origins)). |
+| "Your country couldn't be determined, and tokenised stocks are only offered when it can be. …" | A trade with a tokenised stock, and no country the server can trust: 451 `COUNTRY_UNKNOWN`. | If every visitor sees it, the server isn't getting the country header with the right edge secret ([check the proxy](tokenised-stocks.md#check-the-proxy)). |
+
+With tokenised stocks on, the stock check has three other refusals, each
+with its own message ([refusals](tokenised-stocks.md#refusals)).
 
 When a trade with a browser wallet fails:
 
@@ -224,6 +230,7 @@ The start-up lines say what the server runs with:
 [exclip] storage: rate limits and challenges in Postgres; passkey wallet backups in Postgres
 [exclip] SODAX API key: set
 [exclip] trading on; partner fee none
+[exclip] tokenised stocks: off
 ```
 
 [Monitoring](self-hosting.md#monitoring) lists the alert codes the server

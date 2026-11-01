@@ -85,6 +85,7 @@ For one package:
 | `pnpm --filter @exclip/wallet run preview` | The same for the wallet |
 | `pnpm --filter @exclip/config run headers` | Prints both origins' security headers, for a web server or CDN in front |
 | `pnpm --filter @exclip/wallet run gen:tokens <file>` | Writes the wallet's token table again ([add a network](#add-a-network)) |
+| `pnpm --filter @exclip/wallet run gen:stock-tokens <file>` | Writes the wallet's stock table again, for a build with tokenised stocks on ([switching them on](tokenised-stocks.md#switching-them-on)) |
 | `pnpm --filter <package> test` | Runs one package's tests |
 
 CI runs `pnpm install --frozen-lockfile`, then typecheck, lint, the link
@@ -94,10 +95,10 @@ check, test and build, on every push to `main` and every pull request.
 
 | Package | Runner | What the tests cover |
 |---|---|---|
-| `packages/config` | `tsx --test` | Defaults, every check, the environment overrides, what each build may see |
-| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, rate limits, storage and migrations, the wallet's backup API, serving the builds, a start on a port that's taken |
-| `apps/web` | `tsx --test` | The build config, the catalogue, formatting, the passkey wallet's trade flow on the app's side, the page's CSP check |
-| `apps/wallet` | `tsx --test` | The signing policy, price checks, the hub account, the message protocol, storage, passkeys, the build config |
+| `packages/config` | `tsx --test` | Defaults, every check, the environment overrides, the stock settings and their secrets, what each build may see |
+| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, the stock check and the stock routes, rate limits, storage and migrations, the wallet's backup API, serving the builds, a start on a port that's taken |
+| `apps/web` | `tsx --test` | The build config, the catalogue, formatting, the passkey wallet's trade flow on the app's side, the page's CSP check, the Stocks screen and where the self-certification goes |
+| `apps/wallet` | `tsx --test` | The signing policy, price checks, the hub account, the message protocol, storage, passkeys, the build config, stocks in a build with them on and off |
 
 The tests need no network, database or Redis. The server's tests run it on
 a local port, with memory stores and a stubbed upstream that answers with
@@ -163,7 +164,10 @@ three changes, reviewed by a second person:
 
    The script keeps the networks the wallet knows, drops tokenised stocks,
    checks every address, and writes `apps/wallet/src/sodax/tokens.ts`. Read
-   the diff before you commit it.
+   the diff before you commit it. If you build the wallet with tokenised
+   stocks on, write its stock table from the same file too, with
+   `gen:stock-tokens`
+   ([tokenised stocks](tokenised-stocks.md#switching-them-on)).
 
 Then update the network lists in [the passkey wallet](wallet.md),
 [concepts](concepts.md#networks-and-assets) and the
@@ -195,9 +199,11 @@ WETH.e are all ETH). The app shows only assets in its catalogue.
 No test checks that the two lists match yet, so check both in review.
 
 Where the asset trades, its contract addresses and its decimals all come
-from SODAX, so there is nothing else to add. Tokenised stocks stay out
-whatever the catalogue says: the app hides them, and the server refuses
-them.
+from SODAX, so there is nothing else to add. Tokenised stocks don't go in
+the catalogue. A catalogue asset never counts a stock among its tokens.
+With stocks on, the app lists each stock under SODAX's own symbol and
+name, and leaves out a stock whose symbol is a catalogue asset's, or one
+of its aliases ([tokenised stocks](tokenised-stocks.md#what-users-see)).
 
 ## Change the wallet's rules
 

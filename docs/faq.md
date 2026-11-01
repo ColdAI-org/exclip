@@ -82,8 +82,10 @@ can export it as a CSV file. Another browser or device doesn't see it.
 
 ### Why can't I find tokenised stocks?
 
-ExClip doesn't offer them. The app hides them, and the server refuses any
-quote or intent that names one.
+They're off unless the site's operator has switched them on. Where they're
+on, a Stocks screen lists them. Even then, they're refused in some
+countries, and you confirm a few statements before your first trade
+([tokenised stocks](tokenised-stocks.md#what-users-see)).
 
 ## Running ExClip
 
@@ -122,6 +124,15 @@ Yes, up to 1 % of each swap. You set the fee in `exclip.config.ts`, add the
 receiver to `apps/wallet/fee-receivers.json` in a reviewed commit, and
 check what charging a fee means where you operate
 ([turn a fee on](fees.md#turn-a-fee-on)).
+
+### Can I offer tokenised stocks?
+
+They're off by default, and ExClip can't tell you whether you may offer
+them: take legal advice first. Switching them on needs a reverse proxy that
+reports each visitor's country, two secrets, and a wallet rebuild. ExClip
+then refuses them in a baseline of countries, and in any you add, and asks
+each user to confirm a few statements
+([tokenised stocks](tokenised-stocks.md)).
 
 ### Can I use my own name, logo and colours?
 

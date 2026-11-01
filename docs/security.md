@@ -22,7 +22,8 @@ The passkey wallet has a longer threat model of its own, in
 |---|---|---|---|
 | The user's wallet: a browser wallet, or the passkey wallet on its own origin | The keys | Sign only what the user approves | |
 | The app, `apps/web`, on the app origin | No keys. The trade history and the theme, in the browser's local storage | Build trades, show prices and balances, ask the wallet to sign | Sign, read the passkey wallet's storage, or change the deposit address the passkey wallet shows |
-| The server, `apps/server` | The SODAX key, the fee setting, encrypted wallet backups, rate-limit counters | Forward allow-listed SODAX calls, pin the fee, store backups | Read a backup, sign, learn a wallet address from the backup API, or point the app at another wallet |
+| The server, `apps/server` | The SODAX key, the fee setting, encrypted wallet backups, rate-limit counters. With tokenised stocks on, the edge and attestation secrets | Forward allow-listed SODAX calls, pin the fee, store backups, decide who may trade tokenised stocks | Read a backup, sign, learn a wallet address from the backup API, or point the app at another wallet |
+| Your reverse proxy, with tokenised stocks on | The edge secret | Tell the server each visitor's country, and replace any country or secret a client sent | Confirm the statements for a user: only the server signs a self-certification |
 | SODAX | Quotes, transaction building, the relayer and the solvers | Build what the user asked for, and settle it | Get a different trade past the passkey wallet, which checks every byte against the user's own plan |
 | Chain RPCs | Balances, nonces, gas prices, broadcast | Report the chain honestly | Get a wrong transaction signed. A lying RPC can stall a trade. |
 | CoinGecko | Reference prices | Prices for lists and charts | Set a trade's price. That always comes from a SODAX quote. |
@@ -51,6 +52,10 @@ Two consequences follow:
   client's last counted request, and Postgres deletes expired rows at a
   later sweep. Each process also keeps its 50,000 most recent clients in
   memory, to refuse bursts. The server never logs an address.
+- **With tokenised stocks on, the visitor's country**, which your proxy
+  adds to every request. The server reads it only on the stock routes and
+  on SODAX requests with a stock in them, and keeps and logs none of it. A
+  user's self-certification is kept in their browser, not on the server.
 
 The server writes no request log. It logs its settings at start (never a
 credential), operational alerts as codes, storage outages, and the stack of
@@ -70,7 +75,7 @@ four tests whose names start that way.
 | 3 | A fee is whole basis points up to 1 % and needs a receiver. A half-set fee stops the server at start. | `packages/config/test/config.test.ts`: "partner fee: whole basis points up to 1 %, and only with a receiver". `apps/server/test/exclip.test.ts`: "a half-set or out-of-range fee stops the server at start instead of running with a fee nobody asked for". |
 | 4 | The passkey wallet signs a fee only to a receiver in the committed `fee-receivers.json`, which ships empty. | `apps/wallet/test/build-config.test.ts`: "the repository ships an empty fee allowlist, so the wallet signs only fee-free intents", "fee receivers come from the committed fee-receivers.json, never from the environment". `apps/wallet/test/policy.test.ts`: "a partner fee up to 1% to the allowlisted receiver passes; above the cap or to anyone else is refused". |
 | 5 | Only allow-listed SODAX routes and query parameters reach SODAX. | `apps/server/test/exclip.test.ts`: "the allow-list admits the documented SODAX swap paths and nothing else (no money-market routes in v1)", "a path outside the allow-list is refused with 404 and never reaches SODAX", "only the route's own query parameters are forwarded". |
-| 6 | Tokenised stocks are refused before SODAX sees the request, and an unreadable token list refuses too. | `apps/server/test/exclip.test.ts`: "tokenised stocks are not offered: any quote or intent with a stock leg is refused (451) before SODAX sees it", "a token list that can't be read refuses a request with token legs (fail closed)". |
+| 6 | Tokenised stocks are off by default: a stock is refused before SODAX sees the request. A swap without a stock never meets the stock check, and an unreadable token list refuses every request with a token in it. | `packages/config/test/config.test.ts`: "tokenised stocks: off by default; on, they need the proxy's country header, and the lists are checked". `apps/server/test/exclip.test.ts`: "tokenised stocks off (the default): any quote or intent with a stock leg is refused (451) before SODAX sees it", "stocks off: a stock leg is refused (451 STOCKS_DISABLED) whatever the request carries, and nothing is signed", "stocks in every state: a crypto-only swap is untouched, and the stock check isn't even asked", "a token list that can't be read refuses a request with token legs (fail closed)", "stocks on: a token list that can't be read refuses stock and crypto legs alike (503), even when confirmed". |
 | 7 | With trading off, nothing new is built, but status and cancel stay open. | `apps/server/test/exclip.test.ts`: "with trading off, building a transaction is refused but status and cancel stay open". |
 | 8 | Settings are checked, never passed through. The environment can switch features off but never on. | `packages/config/test/config.test.ts`: "a misspelt setting is an error, not silently ignored", "the environment supplies credentials and the port, and can switch features off but never on". |
 | 9 | The wallet has a host of its own, and the app can't share its passkeys. | `packages/config/test/config.test.ts`: "origins: exact https origins, and the wallet on a host of its own". `apps/wallet/test/build-config.test.ts`: "production build guard: an app origin that shares the wallet's rpId is refused; distinct hosts pass". `apps/wallet/test/webauthn.test.ts`: "rpId is always the page's own host". |
@@ -87,6 +92,12 @@ four tests whose names start that way.
 | 20 | The server stores and logs no personal data, and never learns a wallet address from the backup API. | `apps/server/test/migrations.test.ts`: "no column holds personal data". `apps/server/test/wallet.test.ts`: "no secret or personal data in responses, storage or logs", "no hub-wallet route: the wallet reads the SODAX factory itself; no wallet address reaches this server". |
 | 21 | The wallet's routes never run unmetered, and production never runs on storage that forgets. | `apps/server/test/rateLimit.test.ts`: "store down, fail closed (the wallet): 503 RATE_LIMIT_UNAVAILABLE with Retry-After 30 and no-store". `apps/server/test/wallet.test.ts`: "the default wallet limits fail closed when the shared store is down". `apps/server/test/storage.test.ts`: "production refuses memory storage unless server.allowMemoryStore is set". |
 | 22 | The app broadcasts signed transactions in order, and stops on a mismatch or a revert. | `apps/web/test/exclip-embedded.test.ts`: "broadcast: in order, each confirmed before the next; hash mismatch or revert stops it". |
+| 23 | With tokenised stocks on, a country counts only on a request that carries the proxy's edge secret. A country header a client sets itself counts for nothing. | `apps/server/test/exclip.test.ts`: "stocks on: a country counts only with the edge secret; none, a forged one or an unassigned code is COUNTRY_UNKNOWN". |
+| 24 | ExClip's baseline countries are always refused, and the operator's list only adds to them. | `packages/config/test/config.test.ts`: "the baseline is exported, made of real country codes, and always holds the United States". `apps/server/test/exclip.test.ts`: "stocks on: the baseline and the operator's own list are COUNTRY_RESTRICTED, and nothing is signed there". |
+| 25 | A stock leg passes only with a self-certification this server signed for the current terms and the visitor's country, less than 30 days old. The server signs one only when every statement is confirmed. | `apps/server/test/exclip.test.ts`: "stocks on: a missing, altered, expired, foreign, future or old-terms attestation is SELF_CERT_REQUIRED", "stocks on: a valid attestation lets a stock leg through to SODAX, and nothing of the check travels upstream", "stocks: the confirmation needs every statement, for the current terms, and nothing else". |
+| 26 | Tokenised stocks never run without both secrets. The environment can switch them off but never on. | `packages/config/test/config.test.ts`: "stocks: the environment switches them off but never on, and supplies their two secrets", "start-up: stocks on without the edge secret or a 32-character attestation secret stop the server, not a build". `apps/server/test/index.test.ts`: "tokenised stocks on without EXCLIP_EDGE_SECRET or a 32-character EXCLIP_ATTESTATION_SECRET: the server won't start". `apps/server/test/exclip.test.ts`: "stocks on without the two secrets can't be built, even by a caller that skipped the loader". |
+| 27 | The app offers no stock while stocks are off, and sends the self-certification only to the SODAX proxy and the stock routes. | `apps/web/test/stocks.test.ts`: "off: no stock among the trade sheet's assets, no Stocks screen and no link to one", "the self-certification goes to SODAX's routes and the stock check's own, nowhere else, and not once expired". |
+| 28 | The passkey wallet signs a tokenised stock only in a build with stocks on, and then under the same checks as any other token. | `apps/wallet/test/build-config.test.ts`: "the wallet signs tokenised stocks only in a build with stocks.enabled, and EXCLIP_DISABLE_STOCKS there switches them off". `apps/wallet/test/stocks.test.ts`: "stocks off: a tokenised stock isn't a listed token, to swap or to send, and every coin is as it was", "stocks on: a swap with a stock leg is checked like any other, and its review shows the badge and the disclaimer". `apps/wallet/test/wallet.test.ts`: "tokenised stocks: refused unless the build switched them on; then reviewed with the badge and the disclaimer, and signed exactly as built". |
 
 CI runs every one of these on each pull request and each push to `main`
 (`pnpm test`).
@@ -118,6 +129,12 @@ CI runs every one of these on each pull request and each push to `main`
 - **Release controls are yours to set up.** The repository ships no
   `CODEOWNERS` file. See
   [release controls](embedded-wallet.md#release-controls).
+- **The stock check is only as good as its inputs.** With tokenised stocks
+  on, the country comes from your reverse proxy, and ExClip's proxy
+  examples are untested. A VPN hides a country, and the self-certification
+  is the user's own word. For swaps from the app, the quote is the
+  checkpoint, so a modified client that skips it gets past the proxy. See
+  [tokenised stocks](tokenised-stocks.md#limitations).
 
 ## Reporting
 

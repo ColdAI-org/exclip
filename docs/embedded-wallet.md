@@ -171,6 +171,14 @@ Further rules:
 - **Sends** move a listed token to a full address. A mixed-case address must
   pass its EIP-55 checksum, and the review shows the checksummed form. The
   address can never be a token or SODAX contract.
+- **Tokenised stocks.** A build with `stocks.enabled` off lists none, so the
+  popup refuses to swap or send a stock. A build with it on also lists the
+  stocks in `apps/wallet/src/sodax/stock-tokens.ts`, and checks each like
+  any other token. The review shows a "Tokenised stock" badge after the
+  stock's amount, and the disclaimer. A stock has no price band, so without
+  the popup's own quote its price shows as unchecked. The popup knows
+  nothing of the visitor's country or confirmation: the app and the server
+  check those ([tokenised stocks](tokenised-stocks.md#what-users-see)).
 - **The hub account.** The popup looks up this wallet's SODAX hub account
   itself, on Sonic's public RPC, with the same call the SODAX SDK makes. Once
   the user signs a payload that agrees with the answer, the popup pins it for
