@@ -144,18 +144,18 @@ contract FeeSplitterFactoryTest is Fixture {
     }
 
     function test_predictAndDeployRefuseARateAboveTheCap() public {
-        bytes memory tooHigh = abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, 126, 125);
+        bytes memory tooHigh = abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, 1_001, 1_000);
         vm.expectRevert(tooHigh);
-        factory.predict(operator, 126);
+        factory.predict(operator, 1_001);
         vm.expectRevert(tooHigh);
-        factory.deploy(operator, 126);
-        vm.expectRevert(abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, type(uint256).max, 125));
+        factory.deploy(operator, 1_001);
+        vm.expectRevert(abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, type(uint256).max, 1_000));
         factory.deploy(operator, type(uint256).max);
         // A rate that wouldn't fit in the splitter's uint32 is refused too, rather than cut down.
-        vm.expectRevert(abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, 2 ** 32 + 100, 125));
+        vm.expectRevert(abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, 2 ** 32 + 100, 1_000));
         factory.deploy(operator, 2 ** 32 + 100);
         // The cap itself is allowed.
-        assertEq(FeeSplitter(factory.deploy(operator, 125)).operatorRate(), 125, "at the cap");
+        assertEq(FeeSplitter(factory.deploy(operator, 1_000)).operatorRate(), 1_000, "at the cap");
     }
 
     function test_predictAndDeployRefuseTwoZeroRates() public {

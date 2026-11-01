@@ -55,8 +55,8 @@ contract FeeSplitterFuzzTest is Test {
     /// Payments and releases in any order, at any operator rate the cap allows: after every step, what each payee
     /// has been paid plus what it can release is its exact share of all received, and at most one unit is left over.
     function testFuzz_paymentsAndReleasesInAnyOrder(uint256 seed, uint256 operatorRate) public {
-        operatorRate = bound(operatorRate, 0, 125);
-        FeeSplitter splitter = _splitter(875, 1_000, operator, operatorRate);
+        operatorRate = bound(operatorRate, 0, 1_000);
+        FeeSplitter splitter = _splitter(875, 1_875, operator, operatorRate);
         uint256 received;
         for (uint256 i; i < 24; ++i) {
             uint256 step = uint256(keccak256(abi.encode(seed, i)));
@@ -74,8 +74,8 @@ contract FeeSplitterFuzzTest is Test {
 
     function testFuzz_theCoinIsSharedLikeAnyToken(uint256 amount, uint256 operatorRate) public {
         amount = bound(amount, 0, 1e30);
-        operatorRate = bound(operatorRate, 0, 125);
-        FeeSplitter splitter = _splitter(875, 1_000, operator, operatorRate);
+        operatorRate = bound(operatorRate, 0, 1_000);
+        FeeSplitter splitter = _splitter(875, 1_875, operator, operatorRate);
         vm.deal(address(this), amount);
         (bool ok,) = address(splitter).call{value: amount}("");
         assertTrue(ok, "received");
@@ -91,8 +91,8 @@ contract FeeSplitterFuzzTest is Test {
 
     function testFuzz_predictIsWhereDeployCreates(address payee, uint256 operatorRate, address caller) public {
         vm.assume(payee != address(0) && payee != platform);
-        operatorRate = bound(operatorRate, 0, 125);
-        FeeSplitterFactory factory = new FeeSplitterFactory(platform, 875, 1_000);
+        operatorRate = bound(operatorRate, 0, 1_000);
+        FeeSplitterFactory factory = new FeeSplitterFactory(platform, 875, 1_875);
         address predicted = factory.predict(payee, operatorRate);
         assertEq(
             predicted,
@@ -110,9 +110,9 @@ contract FeeSplitterFuzzTest is Test {
     }
 
     function testFuzz_ratesAboveTheCapAreRefused(uint256 operatorRate) public {
-        operatorRate = bound(operatorRate, 126, type(uint256).max);
-        FeeSplitterFactory factory = new FeeSplitterFactory(platform, 875, 1_000);
-        vm.expectRevert(abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, operatorRate, 125));
+        operatorRate = bound(operatorRate, 1_001, type(uint256).max);
+        FeeSplitterFactory factory = new FeeSplitterFactory(platform, 875, 1_875);
+        vm.expectRevert(abi.encodeWithSelector(FeeSplitterFactory.RateTooHigh.selector, operatorRate, 1_000));
         factory.predict(operator, operatorRate);
     }
 

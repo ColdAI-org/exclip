@@ -274,8 +274,9 @@ In short:
    such as a multisig, that accepts native S. The scripts and these pages
    name no address. It is a parameter, `PLATFORM_RECEIVER`.
 2. **Choose the rates**: the platform's, `PLATFORM_RATE` (875 by default),
-   and the cap on the total, `MAX_TOTAL_RATE` (1,000, or 1 %, by default).
-   See the [decisions](#decisions-for-the-owner) about the cap.
+   and the cap on the total, `MAX_TOTAL_RATE` (1,875, or 1.875 %, by
+   default), which leaves an operator up to 1 %. See the
+   [decisions](#decisions-for-the-owner) about the cap.
 3. **Simulate** with `forge script` without `--broadcast`, and check every
    value it returns.
 4. **Deploy**, signing with an encrypted keystore or a Ledger. The script
@@ -415,9 +416,11 @@ nothing the app sends:
   of the amount sold, rounded down: in the example above, exactly
   9,750,000 units. Today's check is "at most 1 %"
   (`apps/wallet/src/sodax/policy.ts:230`). An exact check means that the
-  rates on the review are the rates charged. The total rate must also be
-  within the wallet's own cap (`MAX_PARTNER_FEE_BPS`,
-  `apps/wallet/src/sodax/chains.ts:87`).
+  rates on the review are the rates charged. The wallet's own cap
+  (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:87`) is 1 %
+  today. With the split it limits the operator's rate, while the total of
+  a split may reach the factory's cap, 1.875 %
+  ([the cap](#decisions-for-the-owner)).
 - **It shows who gets what.** Today the review names one fee, the
   operator's, and shows the receiver's address (`policy.ts:310-311`). With
   the split it says, for example,
@@ -505,21 +508,22 @@ When the split is built, these change with it:
 
 ## Decisions for the owner
 
-These are open. This page lists them and decides none.
+The first is decided. The rest are open, and this page lists them without
+deciding them.
 
-1. **The cap leaves an operator 0.125 %.** Today 1 % is the most a partner
-   fee can be: in the config (`PARTNER_FEE_MAX_BPS`,
-   `packages/config/src/index.ts:122`), in the wallet
-   (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:87`), and in
-   the deploy script's default cap (1,000 per 100,000). With the platform
-   at 0.875 %, an operator can add at most 0.125 %.
-2. **Keep the cap, or raise it.** A factory's cap can't change, so it has
-   to be chosen before the factory is deployed. Raising it later means a
-   new factory, and a new splitter address for every operator. Raising the
-   wallet's cap loosens one of its limits, which needs an issue and
+1. **The cap: decided.** On 2 November 2026 the owner decided that an
+   operator may take up to 1 % of its own, on top of the platform's
+   0.875 %. The total is at most 1.875 %, so the deploy script's default
+   cap is 1,875 per 100,000. A factory's cap can't change, which is why it
+   had to be settled before the factory is deployed. Two limits are still
+   1 % on the whole fee: the config's (`PARTNER_FEE_MAX_BPS`,
+   `packages/config/src/index.ts:122`) and the wallet's
+   (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:87`). When the
+   split is built, each limits the operator's rate instead, and a split's
+   total may reach 1.875 %. Changing the wallet's limit needs an issue and
    agreement first
    ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)).
-3. **What SODAX allows.** The repository can't answer these. SODAX can:
+2. **What SODAX allows.** The repository can't answer these. SODAX can:
    - whether its backend caps a partner fee, and where. The type's comment
      says 100 basis points at most, while the SDK accepts up to 10,000
      ([the two forms](#the-two-forms-of-a-partner-fee));
@@ -528,14 +532,14 @@ These are open. This page lists them and decides none.
    - how the intents contract pays a fee in native S
      ([where the fee goes](#where-the-fee-goes-and-in-which-token));
    - whether its terms let a partner share its fee with another party.
-4. **The platform's address.** It isn't known yet, so every script and
-   this page take it as a parameter. It has to be an address ColdAI
-   controls for good, such as a multisig, that accepts native S. Who
-   deploys the factory is open too.
-5. **Stock swaps.** Whether "no platform fee" covers a swap with a stock on
+3. **The platform's address.** It is chosen outside this repository:
+   every script and this page take it as a parameter, and no file here
+   names it. It has to be an address ColdAI controls for good, that
+   accepts native S on Sonic. Who deploys the factory is open too.
+4. **Stock swaps.** Whether "no platform fee" covers a swap with a stock on
    either side, as this design assumes. And whether an operator may still
    charge its own fee on those swaps.
-6. **How the platform fee holds.** Only the passkey wallet checks where a
+5. **How the platform fee holds.** Only the passkey wallet checks where a
    fee goes. On a DEX whose server someone else runs, browser-wallet swaps
    carry whatever fee that server pins
    ([why it fails closed](fees.md#why-it-fails-closed)). Whether the

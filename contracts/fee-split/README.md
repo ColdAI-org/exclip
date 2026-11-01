@@ -180,7 +180,7 @@ its return values are:
 factory: contract FeeSplitterFactory 0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519
 platform: address 0x1111111111111111111111111111111111111111
 platformRate: uint256 875
-maxTotalRate: uint256 1000
+maxTotalRate: uint256 1875
 implementation: address 0xC7f2Cf4845C6db0e1a1e91ED41Bcd0FcC1b0E141
 initCodeHash: bytes32 0xd458769130779d2ca04e9b6d0ca72e6bd108ce48b867f5b7d759c75bff63beb6
 sampleSplitter: address 0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe
@@ -200,7 +200,7 @@ The script reads its settings from the environment:
 |---|---|---|
 | `PLATFORM_RECEIVER` | The platform's address on Sonic | none: required, and never the zero address |
 | `PLATFORM_RATE` | The platform's rate, per 100,000 | 875 (0.875 %) |
-| `MAX_TOTAL_RATE` | The cap on the platform's rate plus an operator's | 1000 (1 %) |
+| `MAX_TOTAL_RATE` | The cap on the platform's rate plus an operator's | 1875 (1.875 %: the platform's 0.875 % and up to 1 % for an operator) |
 | `SAMPLE_OPERATOR`, `SAMPLE_OPERATOR_RATE` | An operator and rate whose splitter address to print | none, and 100 |
 
 viem 2.57.7's entry for Sonic lists the RPC endpoint `https://rpc.soniclabs.com` and the explorer

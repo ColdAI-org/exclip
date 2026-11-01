@@ -6,10 +6,10 @@ import {FeeSplitterFactory} from "../../src/FeeSplitterFactory.sol";
 import {MockToken} from "./Mocks.sol";
 import {Test, named, vm} from "./Test.sol";
 
-/// A factory with the platform at 0.875 % and a cap of 1 %, the splitter for one operator at 0.1 %, and a token.
+/// A factory with the platform at 0.875 % and a cap of 1.875 %, the splitter for one operator at 0.1 %, and a token.
 abstract contract Fixture is Test {
     uint256 internal constant PLATFORM_RATE = 875;
-    uint256 internal constant MAX_TOTAL_RATE = 1_000;
+    uint256 internal constant MAX_TOTAL_RATE = 1_875;
     uint256 internal constant OPERATOR_RATE = 100;
     address internal constant NATIVE = address(0);
 

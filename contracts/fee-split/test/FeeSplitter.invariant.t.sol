@@ -28,9 +28,9 @@ contract Handler {
 
     constructor(address platform_) {
         platform = platform_;
-        factory = new FeeSplitterFactory(platform_, PLATFORM_RATE, 1_000);
+        factory = new FeeSplitterFactory(platform_, PLATFORM_RATE, 1_875);
         _add(named("operator 1"), 100);
-        _add(named("operator 1"), 125);
+        _add(named("operator 1"), 1_000);
         _add(named("operator 2"), 0);
         _add(named("operator 3"), 1);
         tokens.push(NATIVE);

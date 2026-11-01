@@ -15,7 +15,8 @@ interface VmScript {
 ///
 /// - PLATFORM_RECEIVER: the platform's address on Sonic. Required. The zero address is refused.
 /// - PLATFORM_RATE: the platform's rate, in parts per 100,000 of the amount sold. Default 875, which is 0.875 %.
-/// - MAX_TOTAL_RATE: the most the platform's and an operator's rates may add up to. Default 1,000, which is 1 %.
+/// - MAX_TOTAL_RATE: the most the platform's and an operator's rates may add up to. Default 1,875, which is 1.875 %:
+///   0.875 % for the platform and up to 1 % for an operator.
 /// - SAMPLE_OPERATOR, and SAMPLE_OPERATOR_RATE (default 100): optional, an operator whose splitter address to print.
 ///
 /// The return values are what forge prints. See README.md.
@@ -39,7 +40,7 @@ contract Deploy {
         platform = vm.envOr("PLATFORM_RECEIVER", address(0));
         require(platform != address(0), "PLATFORM_RECEIVER is not set, or is the zero address");
         platformRate = vm.envOr("PLATFORM_RATE", uint256(875));
-        maxTotalRate = vm.envOr("MAX_TOTAL_RATE", uint256(1_000));
+        maxTotalRate = vm.envOr("MAX_TOTAL_RATE", uint256(1_875));
         address sampleOperator = vm.envOr("SAMPLE_OPERATOR", address(0));
         uint256 sampleOperatorRate = vm.envOr("SAMPLE_OPERATOR_RATE", uint256(100));
 
