@@ -16,7 +16,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <a href="https://github.com/ColdAI-org/exclip/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ColdAI-org/exclip/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <img alt="Tests: 262 passing" src="https://img.shields.io/badge/tests-262%20passing-2ea043">
+  <img alt="Tests: 265 passing" src="https://img.shields.io/badge/tests-265%20passing-2ea043">
   <a href="#fees"><img alt="Fee: zero by default" src="https://img.shields.io/badge/fee-zero%20by%20default-00B4F0"></a>
   <img alt="Status: preview, not audited" src="https://img.shields.io/badge/status-preview%20%C2%B7%20not%20audited-orange">
 </p>
@@ -498,7 +498,7 @@ This repository is ExClip's first version: swaps only. It doesn't include:
 | App | Market swaps, limit orders, asset and pair pages, the portfolio, and tokenised stocks when the operator switches them on. Live networks only: there is no test-network mode |
 | Passkey wallet | Market swaps, sends and receives on 14 EVM networks. No limit orders yet |
 | Server | One Node 24 process, on Postgres and optionally Redis. Serves both builds, or sits behind your own web server or CDN |
-| Tests | 262 passing: 102 in the wallet, 100 in the server, 42 in the app and 18 in the config package. CI runs them on every push to `main` and every pull request |
+| Tests | 265 passing: 102 in the wallet, 100 in the server, 42 in the app and 21 in the config package. CI runs them on every push to `main` and every pull request |
 | Security | No independent audit yet |
 | Releases | No tagged release yet. `main` is version 0.1.0 |
 

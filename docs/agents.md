@@ -58,7 +58,7 @@ of the footer: it is ExClip's attribution notice, and every copy shows it
   domains, the wallet build warns that the origins are still the examples:
   that's expected until you set yours. So are the notices about libraries
   around it ([the build fails or warns](troubleshooting.md#the-build-fails-or-warns)).
-- `pnpm run screenshots --brand`, which saves 20 screenshots of your
+- `pnpm run screenshots --brand`, which saves 28 screenshots of your
   rebrand to `screenshots/`, in both themes, at desktop and phone size.
   They show your name, logo and colour, but not your operator or your fee:
   you check those yourself (below).
