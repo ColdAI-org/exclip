@@ -74,6 +74,7 @@ From the repository root:
 | `pnpm run brand` | Checks the brand kit's SVGs, then renders the review sheet, the app's logo and its icons |
 | `pnpm run brand:outline` | Outlines the wordmark again from Inter Bold |
 | `pnpm run screenshots` | Takes the README's screenshots against a stand-in for SODAX ([screenshots](#screenshots)) |
+| `pnpm run contrast` | Checks `brand.colors` in your config against [the contrast rule](branding.md#the-contrast-rule) |
 | `pnpm run docs:links` | Checks every relative link, anchor and image in the Markdown files |
 
 For one package:

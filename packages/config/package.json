@@ -12,7 +12,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "tsx --test test/*.test.ts",
-    "headers": "tsx scripts/print-headers.ts"
+    "headers": "tsx scripts/print-headers.ts",
+    "contrast": "tsx scripts/check-contrast.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

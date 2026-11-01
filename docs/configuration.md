@@ -123,7 +123,7 @@ accent, so check contrast when you change them:
   canvas, `#F6F7F9`.
 
 [The contrast rule](branding.md#the-contrast-rule) gives the defaults'
-ratios.
+ratios, and `pnpm run contrast` checks yours.
 
 Icons follow the logo:
 

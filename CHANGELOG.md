@@ -48,6 +48,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the wallet window, linked to the repository ("ExClip is open source" under
   ExClip's own name). `NOTICE` makes it ExClip's attribution notice, and no
   setting removes it.
+- `pnpm run contrast`, which checks `brand.colors` in your config against
+  the contrast rule and fails when a pairing is below 4.5:1.
 
 ### Changed
 

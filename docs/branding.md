@@ -50,7 +50,8 @@ This page shows where each one appears and what to check.
    ```
 
 4. **Pick your colours** and check them against
-   [the contrast rule](#the-contrast-rule).
+   [the contrast rule](#the-contrast-rule): `pnpm run contrast` measures
+   them.
 5. **Rebuild and restart.** Run `pnpm build` and restart the server. In
    development, restart `pnpm dev`: the dev servers read the config only
    when they start.
@@ -170,8 +171,10 @@ normal text:
 | `accentInk` | White `#FFFFFF`, and the light canvas `#F6F7F9` | `#0077B6`: 4.87:1 and 4.54:1 |
 
 The defaults' ratios are the ones `pnpm run brand` prints
-([brand kit: colour](../brand/README.md#colour)). Any WCAG contrast checker
-works for yours, for example
+([brand kit: colour](../brand/README.md#colour)). `pnpm run contrast`
+measures yours: it reads `brand.colors` from your config, prints the six
+ratios, and fails when one is below 4.5:1. Any other WCAG contrast checker
+works too, for example
 [WebAIM's](https://webaim.org/resources/contrastchecker/).
 
 In practice, `accent` and `accentHover` must be light and saturated, and

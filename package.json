@@ -17,6 +17,7 @@
     "test": "pnpm -r --if-present run test",
     "brand": "node tools/brand/render.mjs",
     "brand:outline": "node tools/brand/outline.mjs",
+    "contrast": "pnpm --filter @exclip/config run contrast",
     "screenshots": "node tools/screenshots/capture.mjs",
     "docs:links": "node tools/docs/check-links.mjs"
   },
