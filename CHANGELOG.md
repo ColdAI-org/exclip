@@ -44,6 +44,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   anchor and image in the Markdown resolves.
 - `pnpm run screenshots`, which captures the README's screenshots into
   `docs/media` from fixtures, with every network request answered locally.
+- A "Powered by ExClip" credit at the end of the footer of the app and of
+  the wallet window, linked to the repository ("ExClip is open source" under
+  ExClip's own name). `NOTICE` makes it ExClip's attribution notice, and no
+  setting removes it.
 
 ### Changed
 

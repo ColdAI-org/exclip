@@ -91,7 +91,9 @@ quote or intent that names one.
 
 No. The Apache-2.0 licence lets you run, change and share it. It doesn't
 cover the "ExClip" name or logo, so a copy you run for other people needs
-your own ([branding](branding.md)). You may say that it's built on ExClip.
+your own name and logo. Rebrand freely; keep the "Powered by ExClip"
+credit, the only use of the ExClip name your copy needs, which ColdAI LLC
+permits ([branding](branding.md)).
 
 ### Do I need a SODAX API key?
 
@@ -123,9 +125,16 @@ check what charging a fee means where you operate
 
 ### Can I use my own name, logo and colours?
 
-Yes, without forking: they're settings in `exclip.config.ts`. Keep each
-colour readable against the canvas
+Yes, without forking: they're settings in `exclip.config.ts`. Rebrand
+freely; keep the "Powered by ExClip" credit at the end of the footer, and
+keep each colour readable against the canvas
 ([branding](branding.md)).
+
+### Can I remove the "Powered by ExClip" credit?
+
+Keep it: rebrand freely, but keep the credit. No setting removes it, and
+[NOTICE](../NOTICE) makes it ExClip's attribution notice
+([the credit](branding.md#the-credit)).
 
 ### Can I change the domains later?
 

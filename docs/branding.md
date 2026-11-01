@@ -4,9 +4,12 @@ ExClip runs under any name. You set your name, logo, colours and legal
 links in `exclip.config.ts`, rebuild, and the app and the wallet window use
 them. You change no code, so you keep taking updates with `git pull`.
 
-If you run ExClip for other people, you must rebrand it. "ExClip" and its
-logo are trademarks of ColdAI LLC. The Apache-2.0 licence covers the code,
-not the name or the logo (section 6; see [NOTICE](../NOTICE)). The
+Rebrand freely; keep the "Powered by ExClip" credit. "ExClip" and its logo
+are trademarks of ColdAI LLC, and the Apache-2.0 licence covers the code,
+not the name or the logo (section 6; see [NOTICE](../NOTICE)). So a copy
+you run for other people needs your own name and logo: it mustn't present
+itself as ExClip or use the ExClip logo. The only use of the ExClip name it
+needs is [the credit](#the-credit), which ColdAI LLC permits. The
 [brand kit](../brand/README.md) is for ExClip itself.
 
 [Configuration](configuration.md#brand) lists each setting and its default.
@@ -138,7 +141,20 @@ always come with an arrow or a sign.
 
 `brand.termsUrl` and `brand.privacyUrl` add "Terms of use" and "Privacy"
 links to the footer, which open in a new tab. With neither, the footer has
-no links.
+no legal links.
+
+## The credit
+
+The footer of the app and of the wallet window ends with "Powered by
+ExClip", a link to [ExClip's repository](https://github.com/ColdAI-org/exclip)
+that opens in a new tab. Under ExClip's own name, it reads "ExClip is open
+source" instead. [NOTICE](../NOTICE) makes it ExClip's attribution notice,
+and no setting removes it.
+
+The credit is 12 px text, underlined, in the footer's own text colour
+rather than your accent, so it stays readable whatever colours you pick:
+at least 6:1 against the background in both themes, in the app and in the
+wallet window.
 
 ## The contrast rule
 
@@ -172,6 +188,8 @@ already covers.
 
 ## What doesn't change
 
+- **The credit**, "Powered by ExClip", at the end of the footer of the app
+  and of the wallet window ([the credit](#the-credit)).
 - **The wallet window's colours.** It has a fixed palette of its own, blue
   on white or on near-black, following the system's light or dark setting.
   Its build takes the brand name and the operator, not the colours.
@@ -192,11 +210,13 @@ the manifest's only icon.
 
 1. Restart `pnpm dev`, or build and serve.
 2. The tab title, the side rail and the footer show your name, logo and
-   operator. Switch the theme and look again.
+   operator, and the footer ends with "Powered by ExClip". Switch the theme
+   and look again.
 3. Open a trade and get a quote. The review's fee row carries your name.
 4. Tab through a screen. The focus ring is visible on every button and
    link, in both themes.
-5. Open the passkey wallet. Its title, heading and tab icon are yours.
+5. Open the passkey wallet. Its title, heading and tab icon are yours, and
+   its footer ends with "Powered by ExClip".
 6. After a build, `apps/web/dist/manifest.webmanifest` has your name and
    your logo.
 

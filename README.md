@@ -303,9 +303,11 @@ Keep text readable. Each accent colour needs a contrast ratio of at least
 format: [the contrast rule](docs/branding.md#the-contrast-rule) lists the
 pairs and ExClip's own ratios.
 
-A copy you run for other people must have its own name and logo. "ExClip"
-and its logo are trademarks of ColdAI LLC, and the licence doesn't cover
-them ([licence and trademarks](#licence-and-trademarks)).
+Rebrand freely; keep the "Powered by ExClip" credit. It ends the footer of
+the app and of the wallet window, linked to this repository, and no setting
+removes it. A copy you run for other people mustn't present itself as
+ExClip or use the ExClip logo
+([licence and trademarks](#licence-and-trademarks)).
 [Branding](docs/branding.md) walks through a full rebrand.
 
 ## How it works
@@ -427,7 +429,7 @@ answer for it. ColdAI publishes the code; it doesn't run your copy. That
 includes:
 
 - **Your own brand.** A copy you run for other people uses its own name and
-  logo.
+  logo, and keeps the "Powered by ExClip" credit.
 - **Your own licensing and legal review**, in every place you offer it:
   whether you may offer swaps there, your terms of use and privacy notice
   (`brand.termsUrl` and `brand.privacyUrl`), and what charging a fee means.
@@ -494,12 +496,18 @@ ExClip is licensed under the [Apache License 2.0](LICENSE), © 2026 ColdAI
 LLC. The vendored packages in `packages/clip-wallet-*` come from Clip
 Wallet, also under the Apache License 2.0, and [NOTICE](NOTICE) credits it.
 
+[NOTICE](NOTICE) makes "Powered by ExClip", with a link to this
+repository, ExClip's attribution notice under section 4(d) of the licence.
+ExClip displays it in the footer of the app and of the wallet window.
+
 "ExClip", "Clip Wallet" and the ExClip logo are trademarks of ColdAI LLC,
-and the Apache License grants no rights to them (section 6). You may say
-that your service is built on ExClip. A copy you run for other people must
-use its own name and logo: set `brand.name` and `brand.logo`
-([branding](docs/branding.md)). The [brand kit](brand/README.md) is for
-ExClip itself.
+and the Apache License grants no rights to them (section 6). Rebrand
+freely; keep the "Powered by ExClip" credit. Your copy can have its own
+name, logo and colours (`brand.name`, `brand.logo` and `brand.colors`; see
+[branding](docs/branding.md)), and the only use of the ExClip name it needs
+is the credit, which ColdAI LLC permits. A copy you run for other people
+mustn't present itself as ExClip or use the ExClip logo. The
+[brand kit](brand/README.md) is for ExClip itself.
 
 ## Credits
 

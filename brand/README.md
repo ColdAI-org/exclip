@@ -97,7 +97,8 @@ Ratios are computed with the WCAG 2.2 relative-luminance formula in `tools/brand
 - **Don't** recolour or swap the routes (cyan always runs on top), close the gap in the full mark, add one to the small
   mark, add shadows, glows or outlines, rotate, skew or stretch the mark, put it on a busy photo, or retype the name in
   another typeface: use the outlined wordmark.
-- **Forks and other operators** must use their own name and logo (`brand.name` and `brand.logo` in
-  `exclip.config.ts`; see [branding](../docs/branding.md)). "ExClip" and the ExClip logo are ColdAI trademarks and
-  aren't licensed under Apache-2.0 (section 6 grants no trademark rights; see [`NOTICE`](../NOTICE)).
+- **Forks and other operators** rebrand freely and keep the "Powered by ExClip" credit. A copy run for other people
+  uses its own name and logo (`brand.name` and `brand.logo` in `exclip.config.ts`; see
+  [branding](../docs/branding.md)) and doesn't present itself as ExClip. "ExClip" and the ExClip logo are ColdAI
+  trademarks and aren't licensed under Apache-2.0 (section 6 grants no trademark rights; see [`NOTICE`](../NOTICE)).
 - Wordmark typeface: [Inter](https://rsms.me/inter/) © The Inter Project Authors, SIL Open Font License 1.1.

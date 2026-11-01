@@ -106,9 +106,12 @@ deploy.
 | `brand.termsUrl` | `null` | Your terms of use (`https://`), linked from the footer. |
 | `brand.privacyUrl` | `null` | Your privacy notice (`https://`), linked from the footer. |
 
-"ExClip" and its logo are trademarks of ColdAI LLC, and the licence does not
-cover them (see [NOTICE](../NOTICE)). If you run ExClip for other people, set
-your own `brand.name` and `brand.logo`.
+Rebrand freely; keep the "Powered by ExClip" credit. "ExClip" and its logo
+are trademarks of ColdAI LLC, and the licence does not cover them (see
+[NOTICE](../NOTICE)). If you run ExClip for other people, set your own
+`brand.name` and `brand.logo`. The footer of the app and of the wallet
+window ends with the credit whatever the brand, and no setting removes it
+([the credit](branding.md#the-credit)).
 
 Colours are `#RRGGBB`, and the config checks only that format. The canvas
 is near-black (`#07080A`) and buttons put dark text (`#03141C`) on the

@@ -6,7 +6,7 @@
 | [Architecture](architecture.md) | See the parts, how they talk, the two origins, where each key lives, and what the server and the browser keep |
 | [Configuration](configuration.md) | Look up every setting in `exclip.config.ts`, its default, and the environment variables that override it |
 | [Self-hosting](self-hosting.md) | Run ExClip in production: Docker or a plain Node host, a reverse proxy, the two origins and their headers, backups, monitoring and upgrades |
-| [Branding](branding.md) | Run ExClip under your own name, logo and colours without forking it, and keep the text readable |
+| [Branding](branding.md) | Run ExClip under your own name, logo and colours without forking it, keep the "Powered by ExClip" credit, and keep the text readable |
 | [The passkey wallet](wallet.md) | Know what the built-in wallet does, how to back it up and get back in, and what the server can and can't see |
 | [Embedded wallet design](embedded-wallet.md) | Review the passkey wallet in depth: its threat model, signing policy, price checks, messages and release controls |
 | [Fees](fees.md) | Know what a swap costs, how an operator's fee works, and why every part refuses a fee nobody configured |

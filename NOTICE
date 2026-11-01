@@ -6,6 +6,20 @@ author of ExClip. It is licensed under the Apache License, Version 2.0
 (see LICENSE).
 
 -------------------------------------------------------------------------------
+Attribution notice
+
+    Powered by ExClip
+    https://github.com/ColdAI-org/exclip
+
+This is ExClip's attribution notice under section 4(d) of the Apache
+License. ExClip displays it in its user interface, in the footer of the app
+and of the passkey wallet window, as a "Powered by ExClip" link to the
+repository above. Derivative Works display it in their user interface in the
+same place: the footer of the app and of the wallet window. A copy that
+keeps ExClip's own name shows "ExClip is open source" there instead, with
+the same link.
+
+-------------------------------------------------------------------------------
 Clip Wallet
 Copyright (c) 2026 ColdAI
 
@@ -36,7 +50,10 @@ distributes a build must meet those licences.
 Trademarks
 
 "ExClip", "Clip Wallet" and the ExClip logo are trademarks of ColdAI LLC.
-The Apache License does not grant permission to use them (section 6). You
-may say that your service is built on ExClip, but a copy that you run for
-other people must use its own name and logo: set brand.name and brand.logo
-in exclip.config.ts.
+The Apache License does not grant permission to use them (section 6).
+
+You may run your copy under your own name, logo and colours: brand.name,
+brand.logo and brand.colors in exclip.config.ts. The only use of the ExClip
+name that your copy needs is the "Powered by ExClip" credit, and ColdAI LLC
+permits that use. A copy that you run for other people must not present
+itself as ExClip or use the ExClip logo.
