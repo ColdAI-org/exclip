@@ -5,9 +5,11 @@ people money. We would rather hear about a problem twice than not at all.
 
 ## Reporting a vulnerability
 
-Report security problems privately through GitHub. Open the repository's
-**Security** tab and choose **Report a vulnerability**, which opens a private
-security advisory. Do not use a public issue, pull request or discussion.
+Report security problems privately. The preferred channel is GitHub's
+private vulnerability reporting: open the repository's **Security** tab and
+choose **Report a vulnerability**, which opens a private security advisory.
+Alternatively, email shayan@coldai.org. Do not use a public issue, pull
+request or discussion.
 
 A useful report says:
 

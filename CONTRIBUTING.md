@@ -3,8 +3,8 @@
 Thanks for helping. This file covers how to set up, what we check, and the
 few rules that exist because ExClip handles money.
 
-Security problems go through a private advisory, never a public issue. See
-[SECURITY.md](SECURITY.md).
+Report security problems privately, through a GitHub security advisory or by
+email, never in a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Setting up
 

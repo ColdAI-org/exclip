@@ -121,6 +121,6 @@ CI runs every one of these on each pull request and each push to `main`
 
 ## Reporting
 
-Report vulnerabilities privately, through a GitHub security advisory, never
-in a public issue. [SECURITY.md](../SECURITY.md) covers what to include, what
-is in scope and what happens next.
+Report vulnerabilities privately, through a GitHub security advisory or by
+email, never in a public issue. [SECURITY.md](../SECURITY.md) covers where to
+send a report, what to include, what is in scope and what happens next.

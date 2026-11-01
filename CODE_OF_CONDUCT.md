@@ -60,9 +60,8 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported privately to the community leaders responsible for enforcement, the
-maintainers of this repository, using the contact details on the GitHub
-organization page that hosts it. Do not report conduct issues in a public
-issue.
+maintainers of this repository, by email to shayan@coldai.org. Do not report
+conduct issues in a public issue.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
