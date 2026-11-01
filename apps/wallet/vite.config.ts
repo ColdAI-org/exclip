@@ -2,7 +2,8 @@
  *
  * Build config baked into the bundle (src/config.ts reads it; nothing comes from the URL, the opener or a .env file):
  *  - From exclip.config.ts, through walletBuildConfig: the one page origin allowed to open and talk to the popup
- *    (origins.app), the wallet's own origin (origins.wallet), brand.name, brand.operator and wallet.unbackedLimitUsd.
+ *    (origins.app), the wallet's own origin (origins.wallet), brand.name, brand.operator, wallet.unbackedLimitUsd and
+ *    stocks.enabled.
  *    Development (vite serve) always uses DEV_ORIGINS: the app on http://localhost:5173, this on :5311.
  *  - Partner-fee receivers: fee-receivers.json (committed; no env).
  * A production build refuses origins that aren't exact https origins or that let the app share the wallet's rpId
@@ -90,6 +91,7 @@ export default defineConfig(async ({ command, isPreview }) => {
       __EXCLIP_BRAND_NAME__: JSON.stringify(wallet.brandName),
       __EXCLIP_OPERATOR__: JSON.stringify(wallet.operator),
       __EXCLIP_UNBACKED_LIMIT_USD__: JSON.stringify(wallet.unbackedLimitUsd),
+      __EXCLIP_STOCKS__: JSON.stringify(wallet.stocks),
     },
     plugins: [cspGuard(), configWarnings(warnings), brandIcon(config.brand.logo)],
     // The vault's default Argon2id is WebAssembly, which the CSP doesn't allow: src/no-wasm.ts stands in for it.

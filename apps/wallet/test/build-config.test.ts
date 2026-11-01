@@ -91,10 +91,17 @@ test("build warnings: the example origins (production only), and a partner fee w
 
 test("what the wallet bakes in: the configured origins in production, DEV_ORIGINS in development", () => {
   const config = configOf({ origins: OWN_ORIGINS, brand: { name: "Swapper", operator: "Example Ltd" }, wallet: { unbackedLimitUsd: 250 } });
-  const names = { brandName: "Swapper", operator: "Example Ltd", unbackedLimitUsd: 250 };
+  const names = { brandName: "Swapper", operator: "Example Ltd", unbackedLimitUsd: 250, stocks: false };
   assert.deepEqual(walletBuildConfig(config, false), { ...names, parentOrigins: [OWN_ORIGINS.app], walletOrigin: OWN_ORIGINS.wallet });
   assert.deepEqual(walletBuildConfig(config, true), { ...names, parentOrigins: [DEV_ORIGINS.app], walletOrigin: DEV_ORIGINS.wallet });
   assert.equal(walletBuildConfig(configOf({}), false).unbackedLimitUsd, 100, "the default limit");
+});
+
+test("the wallet signs tokenised stocks only in a build with stocks.enabled, and EXCLIP_DISABLE_STOCKS there switches them off", () => {
+  const stocks = { stocks: { enabled: true, countryHeader: "cf-ipcountry" } };
+  assert.equal(walletBuildConfig(configOf({}), false).stocks, false, "off by default");
+  for (const dev of [false, true]) assert.equal(walletBuildConfig(configOf(stocks), dev).stocks, true);
+  assert.equal(walletBuildConfig(resolveConfig(stocks, { EXCLIP_DISABLE_STOCKS: "1" }).config, false).stocks, false);
 });
 
 test("vite.config.ts: every define from exclip.config.ts or fee-receivers.json, the security headers, no .env, no WebAssembly", async () => {
@@ -118,6 +125,7 @@ test("vite.config.ts: every define from exclip.config.ts or fee-receivers.json, 
       __EXCLIP_BRAND_NAME__: wallet.brandName,
       __EXCLIP_OPERATOR__: wallet.operator,
       __EXCLIP_UNBACKED_LIMIT_USD__: wallet.unbackedLimitUsd,
+      __EXCLIP_STOCKS__: wallet.stocks,
     }, command);
     assert.equal(vite.envDir, false, "no .env file can add VITE_* values to the bundle");
 

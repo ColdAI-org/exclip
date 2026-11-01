@@ -71,6 +71,21 @@ p { margin: 0; }
 .review dd:last-child { border-bottom: 0; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 500; }
 .txs ol { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+/* Tokenised stocks: the badge on a stock's line in the review, and the disclaimer under the review. The first text
+   colour on the panel, 17.6:1 in the light scheme and 15.3:1 in the dark. */
+.badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.disclaimer { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
 
 /* Price alarm: full screen, red in both colour schemes. */
 .alarm {

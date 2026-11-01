@@ -27,6 +27,9 @@ export const UNBACKED_LIMIT_USD: number =
   typeof __EXCLIP_UNBACKED_LIMIT_USD__ === "number" && Number.isSafeInteger(__EXCLIP_UNBACKED_LIMIT_USD__) && __EXCLIP_UNBACKED_LIMIT_USD__ >= 0
     ? __EXCLIP_UNBACKED_LIMIT_USD__
     : 100;
+/** Whether this build signs swaps and sends of tokenised stocks (exclip.config.ts stocks.enabled): only then does the
+ * policy read sodax/stock-tokens.ts. Off when not defined. */
+export const STOCKS: boolean = typeof __EXCLIP_STOCKS__ === "undefined" ? false : __EXCLIP_STOCKS__ === true;
 
 /** The WebAuthn rpId for this page: always its own host, never a parent domain (docs/embedded-wallet.md).
  * With a parent domain as rpId (example.com for wallet.example.com), every subdomain of it could run the passkey and

@@ -8,3 +8,4 @@ declare const __EXCLIP_WALLET_ORIGIN__: string;
 declare const __EXCLIP_BRAND_NAME__: string;
 declare const __EXCLIP_OPERATOR__: string;
 declare const __EXCLIP_UNBACKED_LIMIT_USD__: number;
+declare const __EXCLIP_STOCKS__: boolean;

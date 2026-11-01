@@ -290,8 +290,13 @@ function reviewScreen(ui: Ui, prepared: PreparedSign): void {
   show(ui.root,
     header(review.title, review.chain.name),
     review.warnings.length ? h("div", { class: "warnings", role: "alert" }, ...review.warnings.map((w) => p(w, "warning"))) : null,
-    h("dl", { class: "review" }, ...review.lines.flatMap((l) => [h("dt", {}, l.label), h("dd", l.mono ? { class: "mono" } : {}, l.value)])),
+    h("dl", { class: "review" }, ...review.lines.flatMap((l) => [
+      h("dt", {}, l.label),
+      // The space keeps the badge a separate word for a screen reader.
+      h("dd", l.mono ? { class: "mono" } : {}, l.value, l.badge ? " " : null, l.badge ? h("span", { class: "badge" }, l.badge) : null),
+    ])),
     steps,
+    review.disclaimer ? p(review.disclaimer, "disclaimer") : null,
     p(`Checked and signed by the wallet at ${location.host}. ${BRAND_NAME} sends the signed transaction${review.txs.length > 1 ? "s" : ""}.`, "note"),
     errorBox(),
     actions(

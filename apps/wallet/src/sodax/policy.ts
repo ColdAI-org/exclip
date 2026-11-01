@@ -15,14 +15,18 @@
  *  - nonces are consecutive and the gas/fee numbers are sane, with the fee capped per network. The chain id comes
  *    from EVM_CHAINS, never the request.
  * Anything else is refused. The review screen is built only from what this module decoded, and shows the nonce and a
- * warning when the fee could be more than FEE_WARNING_BPS of the amount. */
+ * warning when the fee could be more than FEE_WARNING_BPS of the amount. A listed token is one in tokens.ts or, in a
+ * build that switches tokenised stocks on (PolicyContext.stocks), one in stock-tokens.ts; the review marks a stock with
+ * the stock badge and carries the stocks disclaimer (docs/tokenised-stocks.md). */
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, formatUnits, getAddress, parseAbi, parseAbiParameters, type Hex } from "viem";
+import { STOCK_BADGE, stocksDisclaimer } from "@exclip/config/stocks";
 import type { SignRequest, SwapPlan, TransferPlan, UnsignedTx } from "../protocol.ts";
 import { base58Decode } from "../base58.ts";
 import { fromHex, toHex } from "../bytes.ts";
 import { OPERATOR_NAME } from "../config.ts";
 import { INTENTS_CONTRACT, MAX_PARTNER_FEE_BPS, NATIVE_TOKEN, SONIC_KEY, SONIC_WALLET_ROUTER, destination, evmChain, type EvmChain } from "./chains.ts";
 import { SODAX_TOKENS } from "./tokens.ts";
+import { SODAX_STOCK_TOKENS } from "./stock-tokens.ts";
 import { PRICE_BANDS, stableMinimumTooLow, type SwapFacts } from "./price.ts";
 
 export const BROWSER_WALLET_MESSAGE = "Use a browser wallet for this network";
@@ -75,6 +79,8 @@ export type PolicyContext = {
   knownRecipients: readonly string[];
   nowSec: bigint;
   walletOrigin: string;
+  /** The build switched tokenised stocks on (config.ts STOCKS): the tokens in stock-tokens.ts are listed too. */
+  stocks?: boolean;
 };
 
 /** A transaction that passed the policy, with every number as a bigint. */
@@ -85,7 +91,8 @@ export type CheckedTx = {
   label: string;
 };
 
-export type ReviewLine = { label: string; value: string; mono?: boolean };
+/** `badge`: a label shown after the value (STOCK_BADGE, on a tokenised stock's line). */
+export type ReviewLine = { label: string; value: string; mono?: boolean; badge?: string };
 export type Review = {
   kind: "swap" | "transfer";
   title: string;
@@ -93,6 +100,8 @@ export type Review = {
   lines: ReviewLine[];
   warnings: string[];
   txs: CheckedTx[];
+  /** With a tokenised stock in it: the stocks disclaimer, shown under the review. */
+  disclaimer?: string;
   /** Transfers only: the recipient (lower-case), recorded after signing for later first-time/look-alike checks. */
   recipient?: string;
   /** Swaps only: the decoded amounts, for the price check against the popup's own reference (price.ts). */
@@ -105,9 +114,11 @@ const lower = (a: string) => a.toLowerCase();
 const sameAddress = (a: string, b: string) => lower(a) === lower(b);
 const isEvmAddress = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
 
-export type Token = { address: string; symbol: string; decimals: number; hubAsset: string };
-export function findToken(chainKey: string, address: string): Token | null {
-  const list = Object.hasOwn(SODAX_TOKENS, chainKey) ? SODAX_TOKENS[chainKey]! : [];
+/** `stock`: a tokenised stock (stock-tokens.ts). */
+export type Token = { address: string; symbol: string; decimals: number; hubAsset: string; stock?: true };
+
+function lookUp(table: typeof SODAX_TOKENS, chainKey: string, address: string): Token | null {
+  const list = Object.hasOwn(table, chainKey) ? table[chainKey]! : [];
   const evm = isEvmAddress(address);
   for (const [a, symbol, decimals, hubAsset] of list) {
     if (evm ? sameAddress(a, address) : a === address) return { address: a, symbol, decimals, hubAsset };
@@ -115,7 +126,23 @@ export function findToken(chainKey: string, address: string): Token | null {
   return null;
 }
 
+/** The listed token at `address` on `chainKey`. With `stocks`, the tokenised stocks count too, marked `stock`. */
+export function findToken(chainKey: string, address: string, stocks = false): Token | null {
+  const coin = lookUp(SODAX_TOKENS, chainKey, address);
+  if (coin || !stocks) return coin;
+  const stock = lookUp(SODAX_STOCK_TOKENS, chainKey, address);
+  return stock && { ...stock, stock: true };
+}
+
+/** Every listed token contract on `chainKey`, the tokenised stocks included with `stocks`. */
+const tokenContracts = (chainKey: string, stocks: boolean): string[] =>
+  [...(SODAX_TOKENS[chainKey] ?? []), ...(stocks ? SODAX_STOCK_TOKENS[chainKey] ?? [] : [])].map(([a]) => a);
+
 const amount = (raw: bigint, t: { decimals: number; symbol: string }) => `${formatUnits(raw, t.decimals)} ${t.symbol}`;
+/** A tokenised stock's line carries the stock badge. */
+const badge = (t: Token): Pick<ReviewLine, "badge"> => (t.stock ? { badge: STOCK_BADGE } : {});
+/** A review with a tokenised stock in it carries the stocks disclaimer, naming who runs this deployment. */
+const disclaimer = (...tokens: Token[]): Pick<Review, "disclaimer"> => (tokens.some((t) => t.stock) ? { disclaimer: stocksDisclaimer(OPERATOR_NAME) } : {});
 const uint = (s: string) => BigInt(s); // protocol.ts already checked the decimal format
 
 /** decodeFunctionData, then proof that re-encoding gives the same bytes (no trailing data, canonical encoding). */
@@ -242,8 +269,8 @@ function checkIntent(intent: Intent, plan: SwapPlan, chain: EvmChain, ctx: Polic
 function checkSwap(req: SignRequest, plan: SwapPlan, chain: EvmChain, ctx: PolicyContext): Review {
   const dst = destination(plan.dstChainKey);
   if (!dst) throw new PolicyError("UNSUPPORTED_NETWORK", BROWSER_WALLET_MESSAGE, `destination ${plan.dstChainKey}`);
-  const input = findToken(chain.key, plan.inputToken);
-  const output = findToken(plan.dstChainKey, plan.outputToken);
+  const input = findToken(chain.key, plan.inputToken, ctx.stocks === true);
+  const output = findToken(plan.dstChainKey, plan.outputToken, ctx.stocks === true);
   check(!!input && !!output, "token not listed");
   const ownDst = dst.family === "evm" ? ctx.accounts.evm : ctx.accounts[dst.family];
   check(dst.family === "evm" ? sameAddress(plan.dstAddress, ownDst) : plan.dstAddress === ownDst, "destination is not this wallet");
@@ -300,8 +327,8 @@ function checkSwap(req: SignRequest, plan: SwapPlan, chain: EvmChain, ctx: Polic
 
   const lines: ReviewLine[] = [
     { label: "Network", value: chain.name },
-    { label: "You pay", value: amount(gross, input!) },
-    { label: "You receive (at least)", value: `${amount(intent.minOutputAmount, output!)} on ${dst.name}` },
+    { label: "You pay", value: amount(gross, input!), ...badge(input!) },
+    { label: "You receive (at least)", value: `${amount(intent.minOutputAmount, output!)} on ${dst.name}`, ...badge(output!) },
     { label: "Receiving address (yours)", value: dst.family === "evm" ? getAddress(lower(ownDst)) : ownDst, mono: true },
     // The account the deposit and the intent go through, as the popup looked it up on Sonic.
     { label: "Your SODAX account on Sonic", value: getAddress(lower(ctx.hubWallet!)), mono: true },
@@ -312,7 +339,7 @@ function checkSwap(req: SignRequest, plan: SwapPlan, chain: EvmChain, ctx: Polic
   lines.push(nonceLine(checked));
   lines.push({ label: "Signing from", value: ctx.walletOrigin });
   const warning = feeWarning(checked, chain, input!, gross, "pay");
-  return { kind: "swap", title: "Review swap", chain, lines, warnings: warning ? [warning] : [], txs: checked, swap };
+  return { kind: "swap", title: "Review swap", chain, lines, warnings: warning ? [warning] : [], txs: checked, swap, ...disclaimer(input!, output!) };
 }
 
 /* ------------------------------------------------------------------ transfers */
@@ -326,7 +353,7 @@ export function lookAlike(to: string, known: readonly string[]): string | null {
 
 function checkTransfer(req: SignRequest, plan: TransferPlan, chain: EvmChain, ctx: PolicyContext): Review {
   check(req.txs.length === 1, "one transaction");
-  const token = findToken(chain.key, plan.token);
+  const token = findToken(chain.key, plan.token, ctx.stocks === true);
   check(!!token, "token not listed");
   const tx = req.txs[0]!;
   const amt = uint(plan.amount);
@@ -337,7 +364,7 @@ function checkTransfer(req: SignRequest, plan: TransferPlan, chain: EvmChain, ct
   }
   const to = lower(plan.to);
   // Never "send" into a contract that would swallow the funds: the zero address, token contracts, SODAX contracts.
-  const swallowing = [NATIVE_TOKEN, INTENTS_CONTRACT, SONIC_WALLET_ROUTER, chain.assetManager ?? NATIVE_TOKEN, ...(SODAX_TOKENS[chain.key] ?? []).map(([a]) => a)];
+  const swallowing = [NATIVE_TOKEN, INTENTS_CONTRACT, SONIC_WALLET_ROUTER, chain.assetManager ?? NATIVE_TOKEN, ...tokenContracts(chain.key, ctx.stocks === true)];
   if (swallowing.some((a) => sameAddress(a, to))) throw new PolicyError("REFUSED", "That address is a token or SODAX contract. Funds sent there are lost.", "contract recipient");
   if (sameAddress(token!.address, NATIVE_TOKEN)) {
     // plan.amount is in the coin's listed units (HBAR: tinybars); tx.value is in EVM value units (Hedera: weibars).
@@ -361,7 +388,7 @@ function checkTransfer(req: SignRequest, plan: TransferPlan, chain: EvmChain, ct
     chain,
     lines: [
       { label: "Network", value: chain.name },
-      { label: "You send", value: amount(amt, token!) },
+      { label: "You send", value: amount(amt, token!), ...badge(token!) },
       { label: "To (full address)", value: getAddress(to), mono: true },
       { label: "Network fee", value: networkFee(checked, chain) },
       nonceLine(checked),
@@ -370,6 +397,7 @@ function checkTransfer(req: SignRequest, plan: TransferPlan, chain: EvmChain, ct
     warnings,
     txs: checked,
     recipient: to,
+    ...disclaimer(token!),
   };
 }
 

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ClipVault, MemoryStorage, type Clock } from "@clip-wallet/vault";
 import { encodeFunctionData, getAddress, parseTransaction, recoverTransactionAddress, type Hex } from "viem";
+import { STOCK_BADGE, stocksDisclaimer } from "@exclip/config/stocks";
 import {
   ACCOUNTS_KEY, AUTO_LOCK_MS, EmbeddedWallet, NOT_BACKED_UP_WARNING, PASSWORD_BOX_KEY, PENDING_KEY, PRICE_UNCHECKED_WARNING, STATUS_MAC_BOX_KEY, STATUS_RESET_MESSAGE, UNBACKED_LIMIT_USD, isBackedUp, type WalletDeps,
 } from "../src/wallet.ts";
@@ -11,6 +12,7 @@ import type { SwapFacts } from "../src/sodax/price.ts";
 import { argon2id } from "../src/password.ts";
 import { WebAuthnError, UNSUPPORTED_MESSAGE } from "../src/webauthn.ts";
 import { PolicyError } from "../src/sodax/policy.ts";
+import { SODAX_STOCK_TOKENS } from "../src/sodax/stock-tokens.ts";
 import { STATUS_KEY, readStatus } from "../src/storage.ts";
 import type { SignRequest } from "../src/protocol.ts";
 import { FakeApi, FakeAuthenticator, FakeSonic, type AuthenticatorOptions } from "./fakes.ts";
@@ -482,6 +484,30 @@ test("as shipped (no fee receivers): a fee-free swap is quoted on its whole inpu
   }
   // Any fee needs a receiver on the allowlist and the repository ships none: even 0.3% is refused at the review.
   await assert.rejects(d.wallet.prepareSign(swapRequest({ ...spec, feeBps: 30n })), (e: unknown) => e instanceof PolicyError && /receiver/.test(e.detail));
+});
+
+test("tokenised stocks: refused unless the build switched them on; then reviewed with the badge and the disclaimer, and signed exactly as built", async () => {
+  const USDC_ETH = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+  const [STOCK] = SODAX_STOCK_TOKENS["hedera"]![0]!;
+  const auth = new FakeAuthenticator();
+  const api = new FakeApi();
+  const sonic = new FakeSonic();
+  sonic.hub = HUB;
+  const off = device(auth, api, new MemoryStorage(), { hubWallet: sonic.lookup });
+  const { accounts } = await off.wallet.create();
+  // 10 USDC (Ethereum) for at least 0.05 of a tokenised stock (Hedera).
+  const request = swapRequest({ src: "ethereum", dst: "hedera", input: USDC_ETH, output: STOCK, amount: 10_000_000n, min: 5_000_000n, approvals: [10_000_000n], own: accounts });
+  await assert.rejects(off.wallet.prepareSign(request), (e: unknown) => e instanceof PolicyError && e.detail === "token not listed");
+
+  // The same passkey and storage, in a build with stocks on.
+  const on = device(auth, api, off.storage, { hubWallet: sonic.lookup, stocks: true }).wallet;
+  const prepared = await on.prepareSign(request);
+  assert.equal(prepared.review.lines.find((l) => l.label === "You receive (at least)")!.badge, STOCK_BADGE);
+  assert.equal(prepared.review.disclaimer, stocksDisclaimer(OPERATOR_NAME));
+  assert.ok(prepared.review.warnings.includes(PRICE_UNCHECKED_WARNING), "no quote here, and no band for a stock");
+  const { signed } = await on.sign(prepared);
+  assert.equal(signed.length, 2, "the exact approval, then the deposit");
+  for (const [i, raw] of signed.entries()) assert.equal(parseTransaction(raw).data?.toLowerCase(), request.txs[i]!.data.toLowerCase(), "signed as built");
 });
 
 test("status record MAC: an edit made outside the wallet is reset at the next unlock, and that signature is refused", async () => {

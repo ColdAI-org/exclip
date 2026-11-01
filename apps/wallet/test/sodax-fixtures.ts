@@ -44,9 +44,10 @@ function dstBytes(dst: string, address: string): Hex {
   return address.toLowerCase() as Hex;
 }
 
+// Tokenised stocks included: the fixtures build what SODAX would, and whether the wallet takes it is the policy's call.
 export function buildIntent(s: SwapSpec): Intent {
   const src = EVM_CHAINS[s.src]!;
-  const input = findToken(s.src, s.input)!, output = findToken(s.dst, s.output)!;
+  const input = findToken(s.src, s.input, true)!, output = findToken(s.dst, s.output, true)!;
   const feeAmount = s.feeBps ? (s.amount * s.feeBps) / 10_000n : 0n;
   const data: Hex = s.feeBps
     ? encodePacked(["uint8", "bytes"], [1, encodeAbiParameters(parseAbiParameters("uint256 fee, address receiver"), [feeAmount, (s.feeReceiver ?? FEE_RECEIVER) as Hex])])
@@ -84,7 +85,7 @@ export const createIntentData = (intent: Intent) => encodeFunctionData({ abi: IN
 /** The swap transaction SODAX builds for `s` (spoke: assetManager.transfer with hub calls; Sonic: createIntent). */
 export function swapTx(s: SwapSpec, intent = buildIntent(s), nonce = 7): UnsignedTx {
   const src = EVM_CHAINS[s.src]!;
-  const input = findToken(s.src, s.input)!;
+  const input = findToken(s.src, s.input, true)!;
   const native = input.address === NATIVE_TOKEN;
   if (s.src === "sonic") return tx(INTENTS_CONTRACT, createIntentData(intent), native ? s.amount : 0n, nonce);
   const hubCalls = encodeAbiParameters(CALLS, [[

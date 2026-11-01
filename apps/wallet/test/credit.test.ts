@@ -8,29 +8,11 @@ import type { Session } from "../src/channel.ts";
 import type { SignRequest } from "../src/protocol.ts";
 import type { Ui } from "../src/screens.ts";
 import type { EmbeddedWallet, PreparedSign } from "../src/wallet.ts";
-
-class FakeText {
-  constructor(readonly text: string) {}
-  get outerHTML(): string { return this.text; }
-}
-
-/** Keeps its attributes and children and prints them back. Finds nothing, so show() focuses nothing. */
-class FakeElement {
-  readonly attrs: string[] = [];
-  childNodes: (FakeElement | FakeText)[] = [];
-  constructor(readonly tag: string) {}
-  setAttribute(name: string, value: string): void { this.attrs.push(` ${name}="${value}"`); }
-  addEventListener(): void {}
-  append(...nodes: (FakeElement | FakeText)[]): void { this.childNodes.push(...nodes); }
-  replaceChildren(): void { this.childNodes = []; }
-  querySelector(): null { return null; }
-  querySelectorAll(): FakeElement[] { return []; }
-  get outerHTML(): string { return `<${this.tag}${this.attrs.join("")}>${this.childNodes.map((n) => n.outerHTML).join("")}</${this.tag}>`; }
-}
+import { FakeElement, fakeDocument } from "./fake-dom.ts";
 
 Object.assign(globalThis, {
   __EXCLIP_BRAND_NAME__: "Acme Swap",
-  document: { createElement: (tag: string) => new FakeElement(tag), createTextNode: (text: string) => new FakeText(text) },
+  document: fakeDocument,
   location: new URL("https://wallet.example.net/"),
 });
 const { credit, sign } = await import("../src/screens.ts");

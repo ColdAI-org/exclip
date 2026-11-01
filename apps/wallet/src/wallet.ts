@@ -75,6 +75,8 @@ export type WalletDeps = {
   hubWallet: (chainKey: string, evm: string) => Promise<string>;
   /** The single-writer lock for local records. Absent: navigator.locks (storage.ts defaultLocks). */
   locks?: LockManagerLike;
+  /** The build switched tokenised stocks on (config.ts STOCKS), so the policy lists them. Absent: off. */
+  stocks?: boolean;
 };
 
 export const PRICE_UNCHECKED_WARNING = "The wallet couldn't check this price against its own reference. Compare \"You receive (at least)\" with the quote you expected.";
@@ -265,6 +267,7 @@ export class EmbeddedWallet {
       knownRecipients: status.recipients,
       nowSec: BigInt(Math.floor(this.deps.clock.now() / 1000)),
       walletOrigin: this.deps.webauthn.origin,
+      stocks: this.deps.stocks === true,
     });
     // The minimum against the popup's own reference (a fresh SODAX quote, else the band table).
     let priceAlarm: string | undefined;
@@ -314,6 +317,7 @@ export class EmbeddedWallet {
           knownRecipients: status.recipients,
           nowSec: BigInt(Math.floor(this.deps.clock.now() / 1000)),
           walletOrigin: this.deps.webauthn.origin,
+          stocks: this.deps.stocks === true,
         });
         again = recheck.txs.map(signingDigest);
         if (!sameBytes(again, digests)) throw new PolicyError("REFUSED", "This request changed after you reviewed it. Nothing was signed.", "re-check differs");

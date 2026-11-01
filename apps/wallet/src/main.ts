@@ -3,7 +3,7 @@
  * comes from the URL. */
 import { systemClock } from "@clip-wallet/vault";
 import { ChannelError, browserChannelEnv, openChannel, type Session } from "./channel.ts";
-import { BRAND_NAME, DEV, FEE_RECEIVERS, PARENT_ORIGINS } from "./config.ts";
+import { BRAND_NAME, DEV, FEE_RECEIVERS, PARENT_ORIGINS, STOCKS } from "./config.ts";
 import { EmbeddedWallet } from "./wallet.ts";
 import { IdbStorage } from "./storage.ts";
 import { createApi } from "./api.ts";
@@ -43,6 +43,7 @@ async function main(): Promise<void> {
     clock: systemClock,
     quote: (facts) => fetchSodaxQuote((url, init) => fetch(url, init), facts),
     hubWallet: (chainKey, evm) => fetchHubWallet((url, init) => fetch(url, init), chainKey, evm),
+    stocks: STOCKS,
   });
   const ui: Ui = {
     root,

@@ -11,7 +11,8 @@
     "preview": "vite preview --config vite.config.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "tsx --test test/*.test.ts",
-    "gen:tokens": "tsx scripts/gen-sodax-tokens.ts"
+    "gen:tokens": "tsx scripts/gen-sodax-tokens.ts",
+    "gen:stock-tokens": "tsx scripts/gen-sodax-tokens.ts --stocks"
   },
   "dependencies": {
     "@clip-wallet/core": "workspace:*",
