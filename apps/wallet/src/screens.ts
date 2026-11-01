@@ -34,7 +34,14 @@ const errorBox = () => h("p", { class: "error", role: "alert", "data-error": tru
 const button = (label: string, onclick: () => void, kind: "primary" | "secondary" | "danger" = "primary", autofocus = false) =>
   h("button", { type: "button", class: `btn ${kind}`, onclick, "data-autofocus": autofocus }, label);
 const actions = (...children: Child[]) => h("div", { class: "actions" }, ...children);
-const footer = (ui: Ui) => h("footer", { class: "foot" }, p(`Wallet: ${location.host} · Requested by ${new URL(ui.session.origin).host}`));
+/** ExClip's repository, which every copy credits in its footer (NOTICE). */
+const EXCLIP_REPO = "https://github.com/ColdAI-org/exclip";
+/** "Powered by ExClip", linked to the repository; under ExClip's own name, "ExClip is open source". No setting hides it:
+ * NOTICE makes it ExClip's attribution notice. */
+export const credit = (name = BRAND_NAME) =>
+  h("p", { class: "credit" }, h("a", { href: EXCLIP_REPO, target: "_blank", rel: "noopener" }, name === "ExClip" ? "ExClip is open source" : "Powered by ExClip"));
+const footer = (ui: Ui) =>
+  h("footer", { class: "foot" }, p(`Wallet: ${location.host} · Requested by ${new URL(ui.session.origin).host}`), credit());
 /** The host the new passkey is saved for, as the build was configured (this page's own host when it wasn't). */
 const passkeyHost = () => (WALLET_ORIGIN ? new URL(WALLET_ORIGIN).hostname : location.hostname);
 

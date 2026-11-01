@@ -9,7 +9,7 @@ import { IdbStorage } from "./storage.ts";
 import { createApi } from "./api.ts";
 import { browserEnv } from "./webauthn.ts";
 import { h, show } from "./dom.ts";
-import { connect, manage, sign, type Ui } from "./screens.ts";
+import { connect, credit, manage, sign, type Ui } from "./screens.ts";
 import { toUiError } from "./errors.ts";
 import { fetchSodaxQuote } from "./sodax/price.ts";
 import { fetchHubWallet } from "./sodax/hub.ts";
@@ -23,6 +23,7 @@ function standalone(message: string): void {
     h("header", { class: "head" }, h("h1", { tabindex: "-1" }, `${BRAND_NAME} wallet`)),
     h("p", {}, message),
     h("p", { class: "note" }, `This window only works when ${BRAND_NAME} opens it. You can close it.`),
+    h("footer", { class: "foot" }, credit()),
   );
 }
 

@@ -133,9 +133,16 @@ body { margin: 0; }
 .exclip .x-top-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .exclip .x-main { flex: 1; width: 100%; max-width: 1240px; margin: 0 auto; padding: 28px 32px 64px; outline: none; }
 .exclip .x-tabbar { display: none; }
-/* Who runs the deployment and its legal links: under the content, aligned with it. */
+/* Who runs the deployment, its legal links and the credit: under the content, aligned with it. The fine print takes
+   the left, the links and the credit sit at the right. */
 .exclip .x-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; width: calc(100% - 64px); max-width: 1176px; margin: 0 auto; padding: 20px 0 28px; border-top: 1px solid var(--x-line); }
+.exclip .x-footer > .x-fine { margin-right: auto; }
 .exclip .x-footer-links { display: flex; gap: 16px; }
+/* "Powered by ExClip" (NOTICE): text colour, not the brand accent, so it keeps AA contrast under any brand. text-2 is
+   7.8:1 on the dark canvas and 7.2:1 on the light one. */
+.exclip .x-credit { font-size: 12px; line-height: 1.5; color: var(--x-text-2); }
+.exclip .x-credit a { text-decoration: underline; text-underline-offset: 2px; }
+.exclip .x-credit a:hover { color: var(--x-text); }
 
 /* ---------- Buttons ---------- */
 .exclip .x-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px; border: 1px solid transparent; font-weight: 600; font-size: 15px; white-space: nowrap; transition: background-color .15s, border-color .15s, opacity .15s; }
