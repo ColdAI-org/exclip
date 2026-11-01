@@ -1,0 +1,7 @@
+out/
+cache/
+broadcast/
+lcov.info
+.env
+# package.json only names Foundry commands and has no dependencies, but pnpm writes an empty lockfile when it runs one.
+pnpm-lock.yaml

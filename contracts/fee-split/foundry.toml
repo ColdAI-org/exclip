@@ -1,0 +1,24 @@
+# FeeSplitter: splits one SODAX partner fee between the platform and an operator, on Sonic (chain id 146), where
+# SODAX pays partner fees. Nothing in the repository states Sonic's EVM version, so the bytecode targets paris: no
+# PUSH0 (shanghai), MCOPY or transient storage (cancun). See docs/fee-split.md.
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+out = "out"
+cache_path = "cache"
+libs = []
+solc_version = "0.8.28"
+evm_version = "paris"
+optimizer = true
+optimizer_runs = 10000
+fuzz = { runs = 1024 }
+invariant = { runs = 256, depth = 100, fail_on_revert = true }
+
+[lint]
+# The immutables are part of each contract's interface (platform(), platformRate(), initCodeHash(), …), so they keep
+# the usual camelCase. Hashing in plain Solidity is clearer than the assembly the gas note suggests, and costs little.
+exclude_lints = ["screaming-snake-case-immutable", "asm-keccak256"]
+
+[rpc_endpoints]
+sonic = "${SONIC_RPC_URL}"
