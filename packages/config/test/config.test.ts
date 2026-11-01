@@ -7,13 +7,17 @@ import example from "../../../exclip.config.example.ts";
 import {
   ConfigError,
   DEV_ORIGINS,
+  ISO_COUNTRY_CODES,
   PARTNER_FEE_MAX_BPS,
   PLACEHOLDER_ORIGINS,
+  STOCKS_BASELINE_COUNTRIES,
+  STOCK_STATEMENTS,
   WALLET_CSP,
   appSecurityHeaders,
   originsFor,
   parseOrigin,
   resolveConfig,
+  secretProblems,
   sharesRpId,
   usesPlaceholderOrigins,
   walletBuildConfig,
@@ -26,6 +30,9 @@ import { findRepoRoot, loadExclipConfig, loadPublicConfig } from "../src/node.ts
 
 const RECEIVER = "0x1111111111111111111111111111111111111111";
 const SECRET = "sodax-test-key-must-never-leave-the-server";
+/** Stocks switched on as the documentation shows, and the two secrets the server then needs. */
+const STOCKS_ON = { enabled: true, countryHeader: "cf-ipcountry" } as const;
+const STOCK_SECRETS = { EXCLIP_EDGE_SECRET: "edge-test-secret-not-real", EXCLIP_ATTESTATION_SECRET: "a".repeat(32) };
 
 function problemsOf(input: unknown, env: Env = {}): readonly string[] {
   try {
@@ -56,7 +63,10 @@ test("defaults: no partner fee, nothing pinned, no key, the ExClip brand and the
   assert.deepEqual(config.features, { trading: true, embeddedWallet: true });
   assert.deepEqual(config.wallet, { unbackedLimitUsd: 100, maxBackupVersions: 50, dailyNewPasskeys: 2000 });
   assert.deepEqual(config.server, { port: 8080, allowMemoryStore: false, trustProxy: 0, serveStatic: false });
-  assert.deepEqual(secrets, { sodaxApiKey: null, coingeckoApiKey: null, databaseUrl: null, redisUrl: null });
+  assert.deepEqual(config.stocks, { enabled: false, countryHeader: null, blockedCountries: [], termsVersion: "1" });
+  assert.deepEqual(secrets, {
+    sodaxApiKey: null, coingeckoApiKey: null, databaseUrl: null, redisUrl: null, edgeSecret: null, attestationSecret: null,
+  });
 });
 
 test("the shipped exclip.config.example.ts is valid, sets every section, charges no fee and has no key", () => {
@@ -64,9 +74,84 @@ test("the shipped exclip.config.example.ts is valid, sets every section, charges
   assert.equal(example.fees.partnerFeeBps, 0);
   assert.equal(config.fees.partnerFee, null);
   assert.equal(secrets.sodaxApiKey, null);
-  assert.deepEqual(Object.keys(example).sort(), ["brand", "features", "fees", "origins", "server", "sodax", "wallet"]);
+  assert.deepEqual(Object.keys(example).sort(), ["brand", "features", "fees", "origins", "server", "sodax", "stocks", "wallet"]);
+  assert.equal(example.stocks.enabled, false, "tokenised stocks stay off until an operator switches them on");
   // The example spells out the defaults, so copying it changes nothing until you edit it.
   assert.deepEqual(config, resolveConfig().config);
+});
+
+test("tokenised stocks: off by default; on, they need the proxy's country header, and the lists are checked", () => {
+  const { config } = resolveConfig({
+    stocks: { ...STOCKS_ON, countryHeader: "CF-IPCountry", blockedCountries: ["gb", "CA", "GB"], termsVersion: "2026-11-01" },
+  });
+  assert.deepEqual(config.stocks, { enabled: true, countryHeader: "cf-ipcountry", blockedCountries: ["CA", "GB"], termsVersion: "2026-11-01" });
+  // Settings may sit ready while stocks stay off.
+  assert.equal(resolveConfig({ stocks: { countryHeader: "cf-ipcountry" } }).config.stocks.enabled, false);
+
+  assert.deepEqual(problemsOf({ stocks: { enabled: true } }), [
+    "stocks.countryHeader is required when stocks.enabled is true: the header your reverse proxy sets to the visitor's country code (docs/tokenised-stocks.md)",
+  ]);
+  for (const bad of ["cf_ipcountry", "x country", "-x", "x--y", "x-", "a".repeat(65), 7, true, ["cf-ipcountry"]]) {
+    assert.match(problemsOf({ stocks: { countryHeader: bad } })[0]!, /stocks.countryHeader must be a header name/, String(bad));
+  }
+  for (const own of ["x-exclip-edge-secret", "X-Exclip-Stocks-Attestation"]) {
+    assert.match(problemsOf({ stocks: { countryHeader: own } })[0]!, /ExClip uses that header itself/, own);
+  }
+  // Codes that look like countries but aren't ISO 3166-1 alpha-2 ones would block nobody, so they're refused.
+  for (const bad of ["UK", "XK", "EU", "XX", "USA", "U", "", 1, null]) {
+    assert.match(problemsOf({ stocks: { blockedCountries: [bad] } })[0]!, /is not an ISO 3166-1 alpha-2 country code/, String(bad));
+  }
+  assert.match(problemsOf({ stocks: { blockedCountries: "GB" } })[0]!, /stocks.blockedCountries must be a list/);
+  for (const bad of ["", "two words", "a".repeat(33), "-1", 2, null]) {
+    assert.match(problemsOf({ stocks: { termsVersion: bad } })[0]!, /stocks.termsVersion must be/, String(bad));
+  }
+  assert.match(problemsOf({ stocks: { enabled: "yes" } })[0]!, /stocks.enabled must be true or false/);
+  assert.deepEqual(problemsOf({ stocks: { allowedCountries: ["DE"] } }), ["unknown setting stocks.allowedCountries"]);
+});
+
+test("the baseline is exported, made of real country codes, and always holds the United States", () => {
+  assert.equal(ISO_COUNTRY_CODES.size, 249);
+  for (const code of ISO_COUNTRY_CODES) assert.match(code, /^[A-Z]{2}$/);
+  assert.ok(Object.isFrozen(STOCKS_BASELINE_COUNTRIES));
+  assert.deepEqual([...STOCKS_BASELINE_COUNTRIES].sort(), STOCKS_BASELINE_COUNTRIES, "sorted, so a change reads clearly in a diff");
+  for (const code of STOCKS_BASELINE_COUNTRIES) assert.ok(ISO_COUNTRY_CODES.has(code), code);
+  for (const code of ["US", "PR", "GU", "VI", "AS", "MP", "UM"]) assert.ok(STOCKS_BASELINE_COUNTRIES.includes(code), code);
+  // The operator's list adds to the baseline; the baseline isn't copied into it.
+  assert.deepEqual(resolveConfig({ stocks: { blockedCountries: ["US", "FR"] } }).config.stocks.blockedCountries, ["FR", "US"]);
+  assert.deepEqual(STOCK_STATEMENTS.map((s) => s.id), ["not-us-person", "permitted", "risks", "own-decision"]);
+});
+
+test("stocks: the environment switches them off but never on, and supplies their two secrets", () => {
+  const on = resolveConfig({ stocks: STOCKS_ON }, STOCK_SECRETS);
+  assert.equal(on.config.stocks.enabled, true);
+  assert.equal(on.secrets.edgeSecret, STOCK_SECRETS.EXCLIP_EDGE_SECRET);
+  assert.equal(on.secrets.attestationSecret, STOCK_SECRETS.EXCLIP_ATTESTATION_SECRET);
+  assert.equal(resolveConfig({ stocks: STOCKS_ON }, { ...STOCK_SECRETS, EXCLIP_DISABLE_STOCKS: "1" }).config.stocks.enabled, false);
+  assert.equal(resolveConfig({ stocks: STOCKS_ON }, { EXCLIP_DISABLE_STOCKS: "0" }).config.stocks.enabled, true);
+  assert.equal(resolveConfig({}, { EXCLIP_DISABLE_STOCKS: "0", ...STOCK_SECRETS }).config.stocks.enabled, false);
+});
+
+test("start-up: stocks on without the edge secret or a 32-character attestation secret stop the server, not a build", async () => {
+  const problemsFor = (env: Env, stocks: ExclipConfigInput["stocks"] = STOCKS_ON) => {
+    const { config, secrets } = resolveConfig({ stocks }, env);
+    return secretProblems(config, secrets);
+  };
+  assert.deepEqual(problemsFor(STOCK_SECRETS), []);
+  const neither = problemsFor({});
+  assert.equal(neither.length, 2, neither.join("\n"));
+  assert.match(neither[0]!, /^EXCLIP_EDGE_SECRET is required when stocks.enabled is true/);
+  assert.match(neither[1]!, /^EXCLIP_ATTESTATION_SECRET must be at least 32 characters/);
+  assert.deepEqual(problemsFor({ ...STOCK_SECRETS, EXCLIP_EDGE_SECRET: "   " }).length, 1);
+  assert.match(problemsFor({ ...STOCK_SECRETS, EXCLIP_ATTESTATION_SECRET: "a".repeat(31) }).join(), /EXCLIP_ATTESTATION_SECRET/);
+  // Off, or switched off by the environment: nothing is needed, so the emergency brake works without the secrets.
+  assert.deepEqual(problemsFor({}, { ...STOCKS_ON, enabled: false }), []);
+  assert.deepEqual(problemsFor({ EXCLIP_DISABLE_STOCKS: "1" }), []);
+
+  // The server's loader refuses; the builds' loader reads the same file without any secret.
+  const dir = configDir(`export default { stocks: { enabled: true, countryHeader: "cf-ipcountry" } };\n`);
+  await assert.rejects(loadExclipConfig({}, dir), (e: unknown) => e instanceof ConfigError && e.problems.length === 2);
+  assert.equal((await loadExclipConfig(STOCK_SECRETS, dir)).config.stocks.enabled, true);
+  assert.equal((await loadPublicConfig({}, dir)).stocks.enabled, true);
 });
 
 test("partner fee: whole basis points up to 1 %, and only with a receiver", () => {
@@ -182,10 +267,12 @@ test("what a build bakes in never carries a secret", () => {
       sodax: { apiKey: SECRET },
       server: { coingeckoApiKey: SECRET, databaseUrl: `postgres://u:${SECRET}@db/x`, redisUrl: `redis://:${SECRET}@cache` },
       brand: { name: "Swapper" },
+      stocks: STOCKS_ON,
     },
-    { SODAX_API_KEY: SECRET },
+    { SODAX_API_KEY: SECRET, EXCLIP_EDGE_SECRET: SECRET, EXCLIP_ATTESTATION_SECRET: SECRET },
   );
   assert.equal(secrets.sodaxApiKey, SECRET);
+  assert.equal(secrets.edgeSecret, SECRET);
   assert.ok(!JSON.stringify(config).includes(SECRET), "the public settings hold no credential");
   for (const dev of [true, false]) {
     assert.ok(!JSON.stringify(webBuildConfig(config, dev)).includes(SECRET));

@@ -7,7 +7,8 @@
   "description": "ExClip's configuration: the shape of exclip.config.ts, defaults, validation, and the part each app may see.",
   "exports": {
     ".": "./src/index.ts",
-    "./node": "./src/node.ts"
+    "./node": "./src/node.ts",
+    "./stocks": "./src/stocks.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",

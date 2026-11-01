@@ -3,7 +3,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ConfigError, resolveConfig, type Env, type ExclipConfig, type ExclipConfigInput, type ExclipSecrets } from "./index.ts";
+import { ConfigError, resolveConfig, secretProblems, type Env, type ExclipConfig, type ExclipConfigInput, type ExclipSecrets } from "./index.ts";
 
 export const CONFIG_FILE = "exclip.config.ts";
 export const EXAMPLE_CONFIG_FILE = "exclip.config.example.ts";
@@ -28,9 +28,24 @@ export function configPath(env: Env = process.env, root: string = findRepoRoot()
 
 export type LoadedConfig = { config: ExclipConfig; secrets: ExclipSecrets; file: string | null };
 
+/** What the server starts with: the configuration file read as readConfig does, and then the credentials its switched-on
+ * features need (secretProblems), so a server with stocks on but no EXCLIP_EDGE_SECRET stops instead of starting. */
+export async function loadExclipConfig(env: Env = process.env, root: string = findRepoRoot()): Promise<LoadedConfig> {
+  const loaded = await readConfig(env, root);
+  const problems = secretProblems(loaded.config, loaded.secrets);
+  if (problems.length) throw new ConfigError(problems);
+  return loaded;
+}
+
+/** The settings without the credentials, for the Vite configs: they bake a projection of these into a browser
+ * bundle and have no use for a key, so a credential the server needs doesn't have to be set where the apps are built. */
+export async function loadPublicConfig(env: Env = process.env, root: string = findRepoRoot()): Promise<ExclipConfig> {
+  return (await readConfig(env, root)).config;
+}
+
 /** Imports the configuration file (Node 24 runs its TypeScript directly), applies the environment overrides and
  * validates the result. Without a file the defaults apply: no fee, no SODAX key, the placeholder origins. */
-export async function loadExclipConfig(env: Env = process.env, root: string = findRepoRoot()): Promise<LoadedConfig> {
+async function readConfig(env: Env, root: string): Promise<LoadedConfig> {
   const file = configPath(env, root);
   if (!existsSync(file)) {
     if (env.EXCLIP_CONFIG?.trim()) throw new ConfigError([`EXCLIP_CONFIG names ${file}, which does not exist`]);
@@ -39,10 +54,4 @@ export async function loadExclipConfig(env: Env = process.env, root: string = fi
   const mod = (await import(pathToFileURL(file).href)) as { default?: unknown };
   if (mod.default === undefined) throw new ConfigError([`${file} must \`export default\` the configuration`]);
   return { ...resolveConfig(mod.default as ExclipConfigInput, env), file };
-}
-
-/** The settings without the credentials, for the Vite configs: they bake a projection of these into a browser
- * bundle and have no use for a key. */
-export async function loadPublicConfig(env: Env = process.env, root?: string): Promise<ExclipConfig> {
-  return (await loadExclipConfig(env, root)).config;
 }

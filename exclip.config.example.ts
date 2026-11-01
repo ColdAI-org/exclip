@@ -81,4 +81,23 @@ export default {
     // Optional CoinGecko Pro key for market data; the public API is used without one. COINGECKO_API_KEY wins.
     coingeckoApiKey: null,
   },
+
+  stocks: {
+    // Tokenised stocks: off. They are restricted in many countries, and offering them is your decision and your
+    // responsibility. Read docs/tokenised-stocks.md, and take legal advice, before you switch them on.
+    enabled: false,
+    // The header your reverse proxy sets to the visitor's country code. Required when enabled.
+    countryHeader: null,
+    // Countries to refuse on top of ExClip's baseline (ISO 3166-1 alpha-2 codes).
+    blockedCountries: [],
+    // Change it whenever what users confirm changes: everyone confirms again.
+    termsVersion: "1",
+    // Switched on behind a proxy that sets the headers (docs/tokenised-stocks.md), with EXCLIP_EDGE_SECRET and
+    // EXCLIP_ATTESTATION_SECRET (at least 32 characters) in the server's environment:
+    //
+    //   enabled: true,
+    //   countryHeader: "cf-ipcountry",
+    //   blockedCountries: ["CA", "GB"],
+    //   termsVersion: "2026-11-01",
+  },
 } satisfies ExclipConfigInput;

@@ -9,7 +9,10 @@
  * Erasable TypeScript only and no Node imports: Node loads this file directly when Vite imports it from an app's
  * vite.config.ts, and its types are shared with browser code. Reading the file from disk lives in `./node.ts`. */
 
+import { ISO_COUNTRY_CODES, STOCKS_ATTESTATION_HEADER, STOCKS_EDGE_SECRET_HEADER } from "./stocks.ts";
+
 export * from "./headers.ts";
+export * from "./stocks.ts";
 
 export type BrandInput = {
   /** Product name: the app, the wallet window and passkey prompts. Default "ExClip". */
@@ -77,6 +80,22 @@ export type ExclipConfigInput = {
     /** Optional CoinGecko Pro key for market data. COINGECKO_API_KEY wins. Default: the public API. */
     coingeckoApiKey?: string | null;
   };
+  /** Tokenised stocks (docs/tokenised-stocks.md). Off by default. Read that page before you switch them on: they are
+   * restricted in many countries, and offering them is your decision and your responsibility. */
+  stocks?: {
+    /** Offer tokenised stocks. Default off. EXCLIP_DISABLE_STOCKS switches them off again without a code change. With
+     * them on, the server won't start without EXCLIP_EDGE_SECRET and EXCLIP_ATTESTATION_SECRET. */
+    enabled?: boolean;
+    /** The request header your reverse proxy sets to the visitor's country (ISO 3166-1 alpha-2), such as
+     * "cf-ipcountry" behind Cloudflare. Required when enabled. It counts only on a request that also carries
+     * EXCLIP_EDGE_SECRET in x-exclip-edge-secret. */
+    countryHeader?: string | null;
+    /** More countries to refuse (ISO 3166-1 alpha-2 codes, such as "GB"), on top of ExClip's baseline
+     * (STOCKS_BASELINE_COUNTRIES), which nothing removes. Default none. */
+    blockedCountries?: string[];
+    /** The version of what users confirm before trading stocks. Change it and everyone confirms again. Default "1". */
+    termsVersion?: string;
+  };
 };
 
 export type Brand = {
@@ -104,6 +123,9 @@ export type ExclipConfig = {
   features: { trading: boolean; embeddedWallet: boolean };
   wallet: { unbackedLimitUsd: number; maxBackupVersions: number; dailyNewPasskeys: number };
   server: { port: number; allowMemoryStore: boolean; trustProxy: number; serveStatic: boolean };
+  /** `countryHeader` in lower case; `blockedCountries` sorted, without duplicates and without the baseline, which the
+   * server always adds. */
+  stocks: { enabled: boolean; countryHeader: string | null; blockedCountries: string[]; termsVersion: string };
 };
 
 /** Credentials. Only apps/server receives these. */
@@ -112,9 +134,13 @@ export type ExclipSecrets = {
   coingeckoApiKey: string | null;
   databaseUrl: string | null;
   redisUrl: string | null;
+  /** EXCLIP_EDGE_SECRET: what the reverse proxy sends in x-exclip-edge-secret, so its country header can be trusted. */
+  edgeSecret: string | null;
+  /** EXCLIP_ATTESTATION_SECRET: the key that signs the users' self-certifications for tokenised stocks. */
+  attestationSecret: string | null;
 };
 
-/** Environment variables that override the file: credentials, the port, and two switches that can only turn things
+/** Environment variables that override the file: credentials, the port, and three switches that can only turn things
  * off (an operator's emergency brake that needs no code change). */
 export type Env = Readonly<Record<string, string | undefined>>;
 
@@ -158,10 +184,15 @@ export class ConfigError extends Error {
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const ON = /^(1|true|on|yes)$/i;
+/** A request header name: letters, digits and single hyphens (no underscores, which proxies such as nginx drop). */
+const HEADER_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const TERMS_VERSION = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
+/** The shortest EXCLIP_ATTESTATION_SECRET the server accepts. */
+const ATTESTATION_SECRET_MIN = 32;
 
 /** The settings resolveConfig knows, for reporting typos in a hand-written file. */
 const KNOWN_KEYS: Record<string, readonly string[]> = {
-  "": ["sodax", "fees", "origins", "brand", "features", "wallet", "server"],
+  "": ["sodax", "fees", "origins", "brand", "features", "wallet", "server", "stocks"],
   sodax: ["apiKey"],
   fees: ["partnerFeeBps", "receiver"],
   origins: ["app", "wallet"],
@@ -170,6 +201,7 @@ const KNOWN_KEYS: Record<string, readonly string[]> = {
   features: ["trading", "embeddedWallet"],
   wallet: ["unbackedLimitUsd", "maxBackupVersions", "dailyNewPasskeys"],
   server: ["port", "databaseUrl", "redisUrl", "allowMemoryStore", "trustProxy", "serveStatic", "coingeckoApiKey"],
+  stocks: ["enabled", "countryHeader", "blockedCountries", "termsVersion"],
 };
 
 const isLocalHost = (host: string) => host === "localhost" || host === "127.0.0.1";
@@ -332,12 +364,51 @@ export function resolveConfig(input: ExclipConfigInput = {}, env: Env = {}): { c
     serveStatic: flag(s.serveStatic, false, "server.serveStatic"),
   };
 
+  const st = section("stocks");
+  const stocksOn = flag(st.enabled, false, "stocks.enabled");
+  let countryHeader: string | null = null;
+  if (st.countryHeader !== undefined && st.countryHeader !== null && st.countryHeader !== "") {
+    const name = typeof st.countryHeader === "string" ? st.countryHeader.toLowerCase() : "";
+    if (!HEADER_NAME.test(name) || name.length > 64) {
+      problems.push("stocks.countryHeader must be a header name of letters, digits and single hyphens, such as cf-ipcountry");
+    } else if (name === STOCKS_EDGE_SECRET_HEADER || name === STOCKS_ATTESTATION_HEADER) {
+      problems.push(`stocks.countryHeader can't be ${name}: ExClip uses that header itself`);
+    } else {
+      countryHeader = name;
+    }
+  } else if (stocksOn) {
+    problems.push("stocks.countryHeader is required when stocks.enabled is true: the header your reverse proxy sets to the visitor's country code (docs/tokenised-stocks.md)");
+  }
+  const blockedCountries: string[] = [];
+  if (st.blockedCountries !== undefined && !Array.isArray(st.blockedCountries)) {
+    problems.push('stocks.blockedCountries must be a list of ISO 3166-1 alpha-2 country codes, such as ["GB"]');
+  }
+  for (const code of Array.isArray(st.blockedCountries) ? (st.blockedCountries as unknown[]) : []) {
+    const upper = typeof code === "string" ? code.toUpperCase() : "";
+    if (!ISO_COUNTRY_CODES.has(upper)) problems.push(`stocks.blockedCountries: ${JSON.stringify(code)} is not an ISO 3166-1 alpha-2 country code (such as GB)`);
+    else if (!blockedCountries.includes(upper)) blockedCountries.push(upper);
+  }
+  let termsVersion = "1";
+  if (st.termsVersion !== undefined) {
+    if (typeof st.termsVersion === "string" && TERMS_VERSION.test(st.termsVersion)) termsVersion = st.termsVersion;
+    else problems.push('stocks.termsVersion must be 1 to 32 letters, digits, dots, hyphens or underscores, such as "2026-11-01"');
+  }
+  const stocks = {
+    enabled: stocksOn && !ON.test(fromEnv("EXCLIP_DISABLE_STOCKS") ?? ""),
+    countryHeader,
+    blockedCountries: blockedCountries.sort(),
+    termsVersion,
+  };
+
   const sx = section("sodax");
   const secrets: ExclipSecrets = {
     sodaxApiKey: fromEnv("SODAX_API_KEY") ?? optionalText(sx.apiKey, "sodax.apiKey"),
     coingeckoApiKey: fromEnv("COINGECKO_API_KEY") ?? optionalText(s.coingeckoApiKey, "server.coingeckoApiKey"),
     databaseUrl: fromEnv("DATABASE_URL") ?? optionalText(s.databaseUrl, "server.databaseUrl"),
     redisUrl: fromEnv("REDIS_URL") ?? optionalText(s.redisUrl, "server.redisUrl"),
+    // Environment only: these two never belong in a file that is copied around.
+    edgeSecret: fromEnv("EXCLIP_EDGE_SECRET") ?? null,
+    attestationSecret: fromEnv("EXCLIP_ATTESTATION_SECRET") ?? null,
   };
 
   if (problems.length || !app || !wallet) throw new ConfigError(problems);
@@ -353,9 +424,25 @@ export function resolveConfig(input: ExclipConfigInput = {}, env: Env = {}): { c
       features,
       wallet: walletLimits,
       server,
+      stocks,
     },
     secrets,
   };
+}
+
+/** What the server can't start without: the credentials its switched-on features need. Kept out of resolveConfig so the
+ * builds, which never see a credential, can read a configuration that switches stocks on. */
+export function secretProblems(config: ExclipConfig, secrets: ExclipSecrets): string[] {
+  const problems: string[] = [];
+  if (config.stocks.enabled) {
+    if (!secrets.edgeSecret) {
+      problems.push(`EXCLIP_EDGE_SECRET is required when stocks.enabled is true: your reverse proxy sends it in ${STOCKS_EDGE_SECRET_HEADER}, so a country header from anyone else counts for nothing`);
+    }
+    if ((secrets.attestationSecret ?? "").length < ATTESTATION_SECRET_MIN) {
+      problems.push(`EXCLIP_ATTESTATION_SECRET must be at least ${ATTESTATION_SECRET_MIN} characters when stocks.enabled is true: it signs the users' self-certifications`);
+    }
+  }
+  return problems;
 }
 
 function hasControlOrMarkup(value: string): boolean {
