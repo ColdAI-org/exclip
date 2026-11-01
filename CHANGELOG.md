@@ -79,6 +79,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     in `apps/wallet/src/sodax/stock-tokens.ts`, a table that
     `pnpm --filter @exclip/wallet run gen:stock-tokens <file>` writes from
     SODAX's token list.
+- `contracts/fee-split`, two Solidity contracts that split one SODAX
+  partner fee between the platform and a DEX's operator, on Sonic, with
+  tests and a deploy script. They are not audited, not deployed, and not
+  used by the app, the server or the wallet yet. `docs/fee-split.md`
+  explains how SODAX pays a partner fee, how the split works, and how
+  ExClip would use it.
 
 ### Changed
 
