@@ -5,5 +5,7 @@
   "feeReceiver": null,
   "embeddedWallet": true,
   "walletOrigin": "http://localhost:5311",
-  "unbackedLimitUsd": 100
+  "unbackedLimitUsd": 100,
+  "stocksEnabled": false,
+  "stocksTermsVersion": null
 }

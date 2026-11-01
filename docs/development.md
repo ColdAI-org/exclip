@@ -73,7 +73,7 @@ From the repository root:
 | `pnpm test` | Runs every package's tests |
 | `pnpm run brand` | Checks the brand kit's SVGs, then renders the review sheet, the app's logo and its icons |
 | `pnpm run brand:outline` | Outlines the wordmark again from Inter Bold |
-| `pnpm run screenshots` | Takes the README's screenshots against a stand-in for SODAX ([screenshots](#screenshots)). With `--brand`, under your own brand |
+| `pnpm run screenshots` | Takes the documentation's screenshots against a stand-in for SODAX ([screenshots](#screenshots)). With `--brand`, under your own brand |
 | `pnpm run contrast` | Checks `brand.colors` in your config against [the contrast rule](branding.md#the-contrast-rule) |
 | `pnpm run docs:links` | Checks every relative link, anchor and image in the Markdown files |
 
@@ -234,9 +234,11 @@ constants were copied from that version's `@sodax/types`. To upgrade:
 
 ## Screenshots
 
-`pnpm run screenshots` takes the README's screenshots: five screens, in
-light and dark, at desktop and phone size, saved to `docs/media`. Run it
-after a visible change to the UI, and commit the PNGs.
+`pnpm run screenshots` takes the screenshots in the README and in
+[Tokenised stocks](tokenised-stocks.md#what-users-see): seven screens, in
+light and dark, at desktop and phone size, saved to `docs/media`. To take
+only some, name them, for example `pnpm run screenshots stocks eligibility`.
+Run it after a visible change to the UI, and commit the PNGs.
 
 It starts the app's and the wallet's development servers on ports 5173 and
 5311, so stop `pnpm dev` first. It builds nothing, and it needs no server,
@@ -254,6 +256,11 @@ no SODAX key and no network:
 - The passkey wallet's review is `tools/screenshots/approval.ts`: the
   wallet's own screens and signing policy on a canned swap, which nothing
   can sign.
+- Tokenised stocks are off, the default, on every screen but the Stocks
+  screen and its eligibility sheet. For those two, the script answers as a
+  server with stocks on would: the config says they're on, the token list
+  gains the made-up stocks in `fixtures/stocks.json`, and the stock check
+  says the visitor has yet to confirm the statements.
 - The run uses `tools/screenshots/screenshots.config.ts`, which sets
   nothing, so the screenshots show ExClip's own name, logo and colours
   whatever your `exclip.config.ts` says.

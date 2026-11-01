@@ -368,6 +368,29 @@ change:
   reports the price as unchecked. It knows nothing of the visitor's country
   or confirmation: the app and the server check those.
 
+The Stocks screen and the eligibility sheet below list made-up stocks of
+fictional companies. The visitor is in a country where stocks are offered
+and hasn't confirmed the statements yet.
+
+<table>
+  <tr>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="media/stocks-dark-desktop.png"><img alt="The Stocks screen: the disclaimer, then Your access with a Read and confirm button, then five made-up stocks, each with the Tokenised stock badge, its network and a Trade button" src="media/stocks-light-desktop.png"></picture></td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="media/eligibility-dark-desktop.png"><img alt="The eligibility sheet, Before you trade tokenised stocks: the four disclosures, then the statements to confirm, each with an unticked checkbox" src="media/eligibility-light-desktop.png"></picture></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The Stocks screen</sub></td>
+    <td align="center"><sub>The eligibility sheet, as it opens</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="media/stocks-dark-phone.png"><img alt="The Stocks screen on a phone" src="media/stocks-light-phone.png" width="260"></picture></td>
+    <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="media/eligibility-dark-phone.png"><img alt="The eligibility sheet on a phone" src="media/eligibility-light-phone.png" width="260"></picture></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The Stocks screen on a phone</sub></td>
+    <td align="center"><sub>The eligibility sheet on a phone</sub></td>
+  </tr>
+</table>
+
 ## The texts users read
 
 The texts live in `packages/config/src/stocks.ts`, and the app, the wallet

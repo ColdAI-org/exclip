@@ -42,8 +42,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a FAQ.
 - `pnpm run docs:links`, which checks that every relative link, heading
   anchor and image in the Markdown resolves.
-- `pnpm run screenshots`, which captures the README's screenshots into
-  `docs/media` from fixtures, with every network request answered locally.
+- `pnpm run screenshots`, which captures the screenshots in the README and
+  in the tokenised stocks page into `docs/media` from fixtures, with every
+  network request answered locally. Name screens to take only those.
 - A "Powered by ExClip" credit at the end of the footer of the app and of
   the wallet window, linked to the repository ("ExClip is open source" under
   ExClip's own name). `NOTICE` makes it ExClip's attribution notice, and no
@@ -85,7 +86,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `451 STOCKS_DISABLED`. It still does while stocks are off. With stocks on,
   a refusal says why: `COUNTRY_UNKNOWN`, `COUNTRY_RESTRICTED` or
   `SELF_CERT_REQUIRED`.
-
 - The README, rewritten: what ExClip is, screenshots, a quick start, every
   setting with its default, self-hosting, rebranding, how it works, fees,
   security, the operator's responsibility, status and a roadmap.

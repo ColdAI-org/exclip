@@ -1,0 +1,15 @@
+{
+  "snapshot": "2026-10-30T12:00:00Z",
+  "note": "Tokenised stocks for the two screens taken with stocks switched on (the Stocks screen and the eligibility sheet), per network as [symbol, name, decimals, address]; capture.mjs flags each one isRwa and adds them to the token list. Made up: the companies, symbols and addresses are fictional, and any likeness to a real company or ticker is a coincidence. The server places the visitor in the country below, and they have yet to confirm the statements for the terms version below.",
+  "termsVersion": "1",
+  "country": "DE",
+  "chains": {
+    "hedera": [
+      ["AMRB", "Aldermoor Robotics", 8, "0x00000000000000000000000000000000005e0001"],
+      ["BRWE", "Brightwater Energy", 8, "0x00000000000000000000000000000000005e0002"],
+      ["CFMN", "Cinderfield Mining", 8, "0x00000000000000000000000000000000005e0003"],
+      ["LKSP", "Larkspur Health", 8, "0x00000000000000000000000000000000005e0004"],
+      ["QLMD", "Quillon Media", 8, "0x00000000000000000000000000000000005e0005"]
+    ]
+  }
+}

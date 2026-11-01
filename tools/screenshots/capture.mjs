@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 /**
- * Captures the README screenshots: five screens, each in the dark and the light theme, at desktop and phone size.
+ * Captures the documentation's screenshots: seven screens, each in the dark and the light theme, at desktop and phone
+ * size.
  *
- *   pnpm run screenshots
- *   pnpm run screenshots --brand
+ *   pnpm run screenshots                      # every screen
+ *   pnpm run screenshots stocks eligibility   # only the screens named
+ *   pnpm run screenshots --brand              # under your own config (below); screen names work here too
  *
- * Writes docs/media/{home,trade,portfolio,asset,approval}-{dark,light}-{desktop,phone}.png. It starts the web app and
- * the wallet on their usual dev servers (stop `pnpm dev` first; apps/server isn't needed) and drives them in headless
- * Chromium through Playwright. Re-run it after a visible UI change and commit the PNGs.
+ * Writes docs/media/{home,trade,portfolio,asset,approval,stocks,eligibility}-{dark,light}-{desktop,phone}.png. It starts
+ * the web app and the wallet on their usual dev servers (stop `pnpm dev` first; apps/server isn't needed) and drives
+ * them in headless Chromium through Playwright, or in Google Chrome where Playwright's Chromium won't start. Re-run it
+ * after a visible UI change and commit the PNGs.
  *
  * With --brand it takes the same screenshots under the repository's own config instead: exclip.config.ts, or the file
  * EXCLIP_CONFIG names, with its name, operator, logo, colours, fee and origins. They go to screenshots/, which git
@@ -19,13 +22,17 @@
  * The connected wallet is a made-up account (fixtures/account.json) put straight into the app's wallet state, so no
  * wallet SDK loads. The passkey wallet's review is approval.ts, the wallet's own screens on a canned swap, shown as if
  * served from the example wallet origin.
+ *
+ * Tokenised stocks are off, the default, on every screen but two: the Stocks screen and its eligibility sheet are
+ * answered as a server with stocks switched on would answer, with the made-up stocks in fixtures/stocks.json and a
+ * visitor who has yet to confirm the statements.
  */
 import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright";
-import { DEV_ORIGINS, PLACEHOLDER_ORIGINS } from "@exclip/config";
+import { DEV_ORIGINS, PLACEHOLDER_ORIGINS, STOCK_REFUSALS } from "@exclip/config";
 import { loadPublicConfig } from "@exclip/config/node";
 import { ASSETS, canonicalSymbol } from "../../apps/web/src/lib/catalog.ts";
 
@@ -71,6 +78,15 @@ const TOKENS = Object.fromEntries(
     list.map(([symbol, name, decimals, address]) => ({ symbol, name, decimals, address, chainKey })),
   ]),
 );
+const STOCKS = fixture("stocks.json");
+/** The token list with stocks on: TOKENS and the made-up stocks, flagged isRwa as SODAX flags tokenised stocks. */
+const STOCK_TOKENS = { ...TOKENS };
+for (const [chainKey, list] of Object.entries(STOCKS.chains)) {
+  STOCK_TOKENS[chainKey] = [
+    ...(TOKENS[chainKey] ?? []),
+    ...list.map(([symbol, name, decimals, address]) => ({ symbol, name, decimals, address, chainKey, isRwa: true })),
+  ];
+}
 const STABLE = new Set(ASSETS.filter((a) => a.kind === "stable").map((a) => a.symbol));
 for (const a of ASSETS) if (!MARKET.has(a.symbol)) throw new Error(`fixtures/markets.json has no row for ${a.symbol}`);
 
@@ -223,25 +239,33 @@ const ACTIVITY = [
 
 /* ------------------------------------------------------------------ the browser's network */
 
-/** Answers the app's /api calls from the fixtures; anything else under /api gets a 404 and is listed at the end. */
-function api(route, request, url, log) {
+/** Answers the app's /api calls from the fixtures; anything else under /api gets a 404 and is listed at the end. With
+ * `stocks`, the answers are a server's with tokenised stocks switched on. */
+function api(route, request, url, log, stocks) {
   const json = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   const method = request.method();
   const path = url.pathname;
   const chart = /^\/api\/exclip\/markets\/([^/]+)\/chart$/.exec(path);
-  if (method === "GET" && path === "/api/exclip/config") return json(CONFIG);
+  if (method === "GET" && path === "/api/exclip/config") {
+    return json(stocks ? { ...CONFIG, stocksEnabled: true, stocksTermsVersion: STOCKS.termsVersion } : CONFIG);
+  }
   if (method === "GET" && path === "/api/exclip/markets") return json({ status: "ok", asOf: SNAPSHOT, rows: ROWS });
   if (method === "GET" && chart) {
     const row = MARKET.get(decodeURIComponent(chart[1]).toUpperCase());
     const range = url.searchParams.get("range");
     if (row && Object.hasOwn(RANGES, range)) return json({ status: "ok", symbol: row.symbol, range, points: series(row, range) });
   }
-  if (method === "GET" && path === "/api/exclip/sodax/swaps/tokens") return json(TOKENS);
+  if (method === "GET" && path === "/api/exclip/sodax/swaps/tokens") return json(stocks ? STOCK_TOKENS : TOKENS);
   if (method === "POST" && path === "/api/exclip/sodax/swaps/quote") {
     const answer = quote(request.postDataJSON());
     if (answer) return json(answer);
   }
   if (method === "GET" && path === "/api/exclip/sodax/swaps/fees/partner") return json({ fee: "0" });
+  // A visitor the server places in a country where stocks are offered, with no attestation yet.
+  if (stocks && method === "GET" && path === "/api/exclip/stocks/eligibility") {
+    const code = "SELF_CERT_REQUIRED";
+    return json({ eligible: false, code, message: STOCK_REFUSALS[code], country: STOCKS.country, termsVersion: STOCKS.termsVersion, expiresAt: null });
+  }
   log.unanswered.add(`${method} ${path}${url.search}`);
   return json({ error: { code: "NOT_FOUND", message: "Not in the screenshot fixtures." } }, 404);
 }
@@ -279,11 +303,11 @@ async function walletPage(route, request, url, log) {
 /** Every request is answered here, continued to one of the two dev servers, or aborted and logged. A WebSocket to
  * anything but localhost (Vite's own) is logged and left open with nothing behind it: it never reaches a server, and
  * Vite's client, which polls and reloads the page when its socket closes, stays quiet. */
-async function guard(context, log) {
+async function guard(context, log, stocks) {
   await context.route("**/*", (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.origin === APP && url.pathname.startsWith("/api/")) return api(route, request, url, log);
+    if (url.origin === APP && url.pathname.startsWith("/api/")) return api(route, request, url, log, stocks);
     if (url.origin === APP || url.origin === WALLET) return route.continue();
     if (url.origin === WALLET_PAGE) return walletPage(route, request, url, log);
     log.blocked.push(`${request.method()} ${request.url()}`);
@@ -299,7 +323,8 @@ async function guard(context, log) {
 
 /* ------------------------------------------------------------------ screens */
 
-/** Each screen: where it is, whether a wallet is connected, what to wait for, and what to scroll up to at each size. */
+/** Each screen: where it is, whether a wallet is connected or stocks are on, what to wait for, and what to scroll up to
+ * at each size. */
 const SHOTS = [
   {
     name: "home",
@@ -353,6 +378,25 @@ const SHOTS = [
     wallet: true,
     ready: (page) => page.locator("dl.review").waitFor(),
   },
+  {
+    name: "stocks",
+    url: `${APP}/stocks`,
+    stocks: true,
+    ready: async (page) => {
+      await page.getByRole("list", { name: "Tokenised stocks" }).waitFor();
+      await page.getByRole("button", { name: "Read and confirm" }).waitFor();
+    },
+  },
+  {
+    name: "eligibility",
+    url: `${APP}/stocks`,
+    stocks: true,
+    // The sheet as it opens: the disclosures first, nothing ticked.
+    ready: async (page) => {
+      await page.getByRole("button", { name: "Read and confirm" }).click();
+      await page.locator(".x-sheet .x-stock-form").waitFor();
+    },
+  },
 ];
 
 /** Scrolls `selector` up under the sticky top bar, keeping the gap it has to the element before it, so that element
@@ -389,7 +433,7 @@ async function shoot(browser, shot, theme, size, log, file) {
   });
   try {
     await context.clock.setFixedTime(SNAPSHOT);
-    await guard(context, log);
+    await guard(context, log, !!shot.stocks);
     await context.addInitScript(
       ({ app, theme, activity }) => {
         if (location.origin !== app) return;
@@ -451,6 +495,12 @@ async function launch() {
 const tally = (items) => [...items.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map())];
 const kb = (bytes) => `${Math.round(bytes / 1024)} KB`;
 
+/** The screens named on the command line, or all of them. pnpm may pass on a `--` before the names; `--brand` isn't one. */
+const named = process.argv.slice(2).filter((arg) => arg !== "--" && arg !== "--brand");
+const unknown = named.filter((name) => !SHOTS.some((shot) => shot.name === name));
+if (unknown.length) throw new Error(`No screen called ${unknown.join(" or ")}: the screens are ${SHOTS.map((shot) => shot.name).join(", ")}.`);
+const TAKEN = named.length ? SHOTS.filter((shot) => named.includes(shot.name)) : SHOTS;
+
 const log = { blocked: [], unanswered: new Set(), errors: new Set() };
 const written = [];
 const failed = [];
@@ -464,11 +514,11 @@ try {
   console.log(`Dev servers on ${APP} and ${WALLET}; Chromium ${browser.version()}.`);
   // Vite transforms each page and bundles its dependencies on first load, and may reload a page while it does, so
   // every screen is opened once before anything is captured.
-  for (const shot of SHOTS) {
+  for (const shot of TAKEN) {
     await shoot(browser, shot, "dark", "desktop", log, null).catch((e) => console.warn(`warm-up ${shot.name}: ${e.message.split("\n")[0]}`));
   }
   mkdirSync(OUT, { recursive: true });
-  for (const shot of SHOTS) {
+  for (const shot of TAKEN) {
     for (const theme of THEMES) {
       for (const size of Object.keys(SIZES)) {
         const file = join(OUT, `${shot.name}-${theme}-${size}.png`);
