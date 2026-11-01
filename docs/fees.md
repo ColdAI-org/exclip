@@ -98,6 +98,11 @@ the control, which is one reason to protect the server's config like code
    }
    ```
 
+   The same commit updates the test that expects the list to be empty, "the
+   repository ships an empty fee allowlist, …" in
+   `apps/wallet/test/build-config.test.ts`, so that it expects your
+   receiver, in lower case.
+
 4. **Rebuild the wallet and restart the server.** The rate alone needs only
    a restart, but a new receiver needs a wallet build.
 5. **Check it.** `GET /api/exclip/config` shows the rate and the receiver.

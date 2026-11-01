@@ -53,6 +53,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `pnpm run screenshots --brand`, which takes the same screenshots under
   the brand, fee and origins in your config and saves them to the
   git-ignored `screenshots/`.
+- `AGENTS.md`, instructions for coding agents with a recipe for making
+  ExClip your own DEX (`CLAUDE.md` points to it), and `docs/agents.md`,
+  which shows people how to ask for that and check the result.
 
 ### Changed
 

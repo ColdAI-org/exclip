@@ -1,0 +1,123 @@
+# Make your own DEX with a coding agent
+
+ExClip runs under your name, logo, colours and fee, all set in one file. A
+coding agent can make those changes for you from one plain-English request,
+and check them. It works with coding agents such as Claude Code and Codex,
+which read the instructions in [AGENTS.md](../AGENTS.md) at the root of the
+repository.
+
+The agent rebrands your copy and checks it. It doesn't deploy it: your
+domains, the server, the SODAX key and your legal pages stay with you.
+
+## Before you start
+
+- A clone of the repository, with Node 24 and pnpm, and `pnpm install` run
+  once ([set up](development.md#set-up)).
+- Your logo as a file in the repository's folder, ideally a square SVG or
+  PNG.
+- If you'll charge a fee: the EVM address that receives it. Taking a fee on
+  swaps can make you a provider of a financial service, so check what it
+  means where you operate ([fees](fees.md#turn-a-fee-on)).
+
+## The prompt
+
+Start your agent at the root of the repository and paste:
+
+```text
+Make this my own DEX: call it Acme Swap, operator Acme Ltd, use acme.svg as the logo, a teal accent, and a 0.1% fee paid to 0xYourFeeReceiverAddress.
+```
+
+Put in your own name, operator, logo file, colour and address. Leave out
+the fee to charge none. If you already have them, add your two domains (for
+example "the app at https://swap.acme.example and the wallet at
+https://wallet.acme.example") and the links to your terms and privacy
+notice. Without them, the agent leaves those settings for you.
+
+## What the agent changes
+
+| What | Where |
+|---|---|
+| Name, operator, colours, logo path and fee | `exclip.config.ts`, a copy of `exclip.config.example.ts`. Git ignores it |
+| Your logo | Copied into `apps/web/public`, for example `apps/web/public/acme.svg` |
+| The fee receiver | Added to `apps/wallet/fee-receivers.json`, the passkey wallet's list of addresses a fee may go to |
+| The test that expects that list to be empty | `apps/wallet/test/build-config.test.ts`, changed to expect your receiver |
+
+It changes no other code. It keeps the "Powered by ExClip" credit at the end
+of the footer: it is ExClip's attribution notice, and every copy shows it
+([the credit](branding.md#the-credit)).
+
+## What the agent runs
+
+- `pnpm run contrast`, which measures your colours against
+  [the contrast rule](branding.md#the-contrast-rule). The agent picks the
+  three shades of your colour and adjusts them until all six pairings pass.
+- `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm run docs:links`.
+- The build, `NODE_OPTIONS=--max-old-space-size=6144 pnpm build`. Without
+  domains, the wallet build warns that the origins are still the examples:
+  that's expected until you set yours.
+- `pnpm run screenshots --brand`, which saves 20 screenshots of your
+  rebrand to `screenshots/`, in both themes, at desktop and phone size.
+
+It ends with a summary of what it changed, the contrast ratios, the
+results, and what's left for you.
+
+## What you still do
+
+The agent can't do these, or shouldn't:
+
+- **The SODAX key.** Set it as `SODAX_API_KEY` in the server's environment,
+  never in `exclip.config.ts` and never in a commit or a chat.
+- **Domains, DNS and TLS.** Pick two hosts, the wallet on one of its own,
+  and set them in `origins`. The wallet's host is for good: passkeys are
+  bound to it ([for operators](wallet.md#for-operators)).
+- **Serving it.** The server, Postgres and its backups, and the proxy or CDN
+  in front, which must send each origin's headers
+  ([self-hosting](self-hosting.md)).
+- **Legal pages and review.** Your terms of use and privacy notice, and
+  what offering swaps and charging a fee mean where you operate
+  ([operator responsibility](../README.md#operator-responsibility)).
+- **The fee receiver.** Confirm that you control the address. The list it
+  goes on changes only in a reviewed commit
+  ([contributing](../CONTRIBUTING.md#changes-that-get-extra-review)).
+- **The release.** Build the wallet in CI from a reviewed commit, and deploy
+  exactly that build
+  ([release controls](embedded-wallet.md#release-controls)).
+- **Going live.** Open in stages
+  ([open in stages](self-hosting.md#6-open-in-stages)).
+
+## Review the changes before you build
+
+1. Run `git status`. Expect `apps/wallet/fee-receivers.json` and
+   `apps/wallet/test/build-config.test.ts` changed, and your logo untracked
+   under `apps/web/public`. Anything else needs a reason.
+2. Run `git diff`. The address in `fee-receivers.json` must be yours,
+   character for character, and the test must expect the same address in
+   lower case.
+3. Open `exclip.config.ts` yourself. Git ignores it, so `git diff` doesn't
+   show it. Check:
+   - `brand`: your name, operator and logo path, with no "ExClip" in them;
+   - `fees.partnerFeeBps`: the fee in basis points, where `100` is 1 % and
+     `10` is 0.1 %;
+   - `fees.receiver`: your address again;
+   - `origins`: your domains, or the examples if you gave none;
+   - `sodax.apiKey`: empty. No key or password belongs in this file.
+4. Look through the screenshots in `screenshots/`: your name, logo and
+   colour in both themes, and the wallet window's footer in the approval
+   screenshots.
+
+## Check before you go live
+
+Agents make mistakes, and they sound just as sure when they're wrong. Check
+these three yourself before real users arrive:
+
+- **Contrast.** Run `pnpm run contrast`: all six pairings `ok`. Then follow
+  [check your rebrand](branding.md#check-your-rebrand) in a browser, both
+  themes included.
+- **The fee.** The receiver in `exclip.config.ts` and in
+  `fee-receivers.json` is an address you control, and the rate is what you
+  meant. Once the server runs, `/api/exclip/config` shows both
+  ([smoke checks](self-hosting.md#smoke-checks)). Make a first trade with a
+  small amount.
+- **The origins.** Each is an exact `https://` origin, the wallet on a host
+  of its own, and each host sends its headers. The smoke checks compare
+  them with what `pnpm --filter @exclip/config run headers` prints.
