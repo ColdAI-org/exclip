@@ -20,7 +20,8 @@ const listeners = new Set<() => void>();
 function set(patch: Partial<UiState>) { state = { ...state, ...patch }; listeners.forEach(l => l()); }
 function subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; }
 
-export function useUi(): UiState { return useSyncExternalStore(subscribe, () => state); }
+// The server snapshot lets a page that mounts a sheet render outside a browser (the tests do).
+export function useUi(): UiState { return useSyncExternalStore(subscribe, () => state, () => state); }
 
 const THEME_KEY = "exclip.theme";
 

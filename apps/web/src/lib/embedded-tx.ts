@@ -11,6 +11,7 @@
  * BROWSER_WALLET_MESSAGE before the popup opens.
  */
 import { MAX_TXS, type Hex, type SignRequest, type SignResult, type SwapPlan, type TransferPlan, type UnsignedTx } from "./wallet-protocol";
+import { stockRefusalText } from "./stock-gate";
 import type { SerializedIntent, SwapInput, SwapOutcome, SwapProgress } from "./wallet";
 
 /** The networks the popup signs on (apps/wallet/src/sodax/chains.ts EVM_CHAINS; a test keeps them equal). */
@@ -191,7 +192,8 @@ const serialize = (intent: object): SerializedIntent =>
 
 function unwrap<T>(r: Result<T>, message: string): T {
   if (r.ok) return r.value;
-  throw new EmbeddedTradeError(message);
+  // A tokenised-stock refusal (HTTP 451 from this server's proxy) says why, in place of the generic message.
+  throw new EmbeddedTradeError(stockRefusalText(r.error) ?? message);
 }
 
 const asRaw = (tx: SdkRawTx, kind: RawTx["kind"]): RawTx => {

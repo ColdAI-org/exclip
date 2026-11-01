@@ -22,6 +22,7 @@ import {
 import { SodaxProvider, useSodaxContext, useXBalances, type SodaxOptions, type SpokeChainKey } from "@sodax/dapp-kit";
 import { relayTxAndWaitPacket } from "@sodax/sdk";
 import { ArrowLeft, Check, ExternalLink, KeyRound, Loader2, Wallet as WalletIcon, X } from "lucide-react";
+import { STOCKS_ATTESTATION_HEADER } from "@exclip/config/stocks";
 import { sodaxOptions, useExclipConfig, useSodaxTokens, type SodaxToken } from "./api";
 import { BRAND } from "./brand";
 import { networkMeta } from "./catalog";
@@ -31,6 +32,7 @@ import {
   BROWSER_WALLET_MESSAGE, EmbeddedTradeError, HUB_CHAIN, embeddedSend, embeddedSwap, embeddedSwapProblem, isEmbeddedChain,
   type EvmRpc, type SodaxSwaps,
 } from "./embedded-tx";
+import { onStockPass, stockPass, stockRefusalText } from "./stock-gate";
 import {
   closeWalletSheet,
   getWalletState,
@@ -71,6 +73,8 @@ const revive = (intent: SerializedIntent) =>
   Object.fromEntries(Object.entries(intent).map(([k, v]) => [k, typeof v === "string" && /^\d+$/.test(v) && !/^0x/.test(v) ? BigInt(v) : v]));
 
 function errorText(e: unknown): string {
+  const refused = stockRefusalText(e);
+  if (refused) return refused;
   const err = e as { code?: string; message?: string; error?: { code?: string; message?: string } };
   const code = err?.code ?? err?.error?.code ?? "";
   if (/reject|denied|cancel/i.test(`${code} ${err?.message ?? ""}`)) return "You declined the request in your wallet.";
@@ -140,6 +144,16 @@ function Bridge() {
   const disconnect = useXDisconnect();
   const live = useRef({ providers, accounts, origin: embeddedOrigin(config), trading: !!config?.tradingEnabled });
   live.current = { providers, accounts, origin: embeddedOrigin(config), trading: !!config?.tradingEnabled };
+  const stocksOn = !!config?.stocksEnabled;
+
+  useEffect(() => {
+    // The SDK's calls to this server carry the stock self-certification, as the app's own do (lib/api.ts), so the
+    // proxy's stock check sees it. An empty value counts as none; the proxy never forwards it to SODAX.
+    if (!stocksOn) return;
+    const apply = () => sodax.api.setHeaders({ [STOCKS_ATTESTATION_HEADER]: stockPass()?.attestation ?? "" });
+    apply();
+    return onStockPass(apply);
+  }, [sodax, stocksOn]);
 
   useEffect(() => {
     // While the passkey wallet is in use, its session owns `accounts` (wallet.ts setEmbeddedSession).

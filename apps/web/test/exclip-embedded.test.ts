@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { EvmSolverService, IntentDataService, Sodax } from "@sodax/sdk";
+import { EvmSolverService, IntentDataService, Sodax, SodaxError, SwapsApiError } from "@sodax/sdk";
+import { STOCK_REFUSALS } from "@exclip/config/stocks";
 import { sodaxOptions } from "../src/lib/api.ts";
 import { EmbeddedWalletError, WalletPopup, validWalletOrigin, type PopupMessage } from "../src/lib/embedded-client.ts";
 import {
@@ -12,6 +13,7 @@ import {
 import { READY_TIMEOUT_MS, REQUEST_TIMEOUT_MS, type Hex, type SignRequest, type SignResult, type SwapPlan } from "../src/lib/wallet-protocol.ts";
 import type { SwapInput } from "../src/lib/wallet.ts";
 import { buildWalletOrigin, trustedWalletOrigin, walletOfferedOn } from "../src/lib/wallet-origin.ts";
+import { stockRefusalText } from "../src/lib/stock-gate.ts";
 
 const APP = "https://exclip.example.com";
 const WALLET = "https://wallet.example.com";
@@ -384,6 +386,24 @@ test("embedded swap: Sonic needs no relay; failures before signing close the pop
     const sodax = fakeSodax({ relay: { ok: false, error: "RELAY_TIMEOUT" } });
     await assert.rejects(embeddedSwap(sodax, fakeSigner(), swapInput(), OWN, () => {}), tradeError(true, /Don't resend/));
   }
+});
+
+test("a refusal from the stock check reaches the user as its reason, through the SDK's own errors", async () => {
+  // How the SDK returns a 451 from this server's proxy: the swaps API's HTTP error, as the cause of a SodaxError.
+  const sdkError = (status: number, body?: unknown) => new SodaxError("EXTERNAL_API_ERROR", `/swaps/intents responded with ${status}`, {
+    feature: "backend",
+    context: { api: "swaps", endpoint: "/swaps/intents", code: "HTTP_ERROR", status } as never,
+    cause: new SwapsApiError("HTTP_ERROR", `/swaps/intents responded with ${status}`, { endpoint: "/swaps/intents", method: "POST", path: "/swaps/intents", status, body } as never),
+  });
+  for (const [code, text] of Object.entries(STOCK_REFUSALS)) assert.equal(stockRefusalText(sdkError(451, { error: { code, message: "" } })), text, code);
+  assert.equal(stockRefusalText(sdkError(503, { error: { code: "COUNTRY_RESTRICTED" } })), null);
+  assert.equal(stockRefusalText(sdkError(451, "not json")), null);
+
+  const sodax = fakeSodax();
+  sodax.createIntent = async () => ({ ok: false, error: sdkError(451, { error: { code: "COUNTRY_RESTRICTED", message: "" } }) });
+  const signer = fakeSigner();
+  await assert.rejects(embeddedSwap(sodax, signer, swapInput(), OWN, () => {}), tradeError(false, new RegExp(`^${STOCK_REFUSALS.COUNTRY_RESTRICTED}$`)));
+  assert.equal(signer.requests.length, 0, "nothing reaches the popup");
 });
 
 /** The parts of the SDK's resolved settings this test reads. (Its options type wants a literal http(s) URL type.) */

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownUp, ArrowLeft, Check, ChevronDown, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { STOCK_BADGE } from "@exclip/config/stocks";
 import {
-  ApiError, fetchQuote, marketMap, tokensBySymbol, useExclipConfig, useMarkets, useSodaxTokens,
+  ApiError, fetchQuote, marketMap, useExclipConfig, useMarkets, useSodaxTokens,
   type SodaxToken,
 } from "../lib/api";
 import { BRAND } from "../lib/brand";
@@ -14,11 +15,15 @@ import { addActivity, updateActivity, useActivity } from "../lib/activity";
 import { balanceOf, pickChain } from "../lib/tokens";
 import { devSignOnly } from "../lib/embedded";
 import { embeddedSwapProblem } from "../lib/embedded-tx";
+import { stockListings, tradableAssets, useStockEligibility, useStockPass, type StockListing } from "../lib/stocks";
 import { Sheet } from "./Sheet";
 import { AssetIcon, NetworkBadge, Tabs } from "./primitives";
+import { ELIGIBILITY_TITLE, EligibilityForm, StockAccess, StockBadge, StockDisclaimer } from "./Stocks";
 
 type Side = { symbol: string; chainKey: string | null };
-type Step = "edit" | "pick-from" | "pick-to" | "review" | "progress";
+type Step = "edit" | "pick-from" | "pick-to" | "eligibility" | "review" | "progress";
+
+const NO_STOCKS: ReadonlyMap<string, StockListing> = new Map();
 
 const SLIPPAGES = [0.1, 0.5, 1] as const;
 const HUB_SECONDS = 20;
@@ -51,20 +56,15 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
   const { data: markets } = useMarkets();
 
   const prices = useMemo(() => marketMap(markets?.rows), [markets]);
-  const bySymbol = useMemo(() => {
-    const m = tokensBySymbol(tokens);
-    for (const [s, list] of m) {
-      // Swaps only: tokenised real-world assets (stocks) never enter this flow.
-      const keep = list.filter(t => !t.isRwa);
-      if (keep.length) m.set(s, keep); else m.delete(s);
-    }
-    return m;
-  }, [tokens]);
+  // Tokenised stocks (SODAX's isRwa tokens) come in only when this server offers them, under SODAX's own symbols.
+  const stocksOn = !!config?.stocksEnabled;
+  const stocks = useMemo(() => (stocksOn ? stockListings(tokens) : NO_STOCKS), [tokens, stocksOn]);
+  const bySymbol = useMemo(() => tradableAssets(tokens, stocks), [tokens, stocks]);
 
   const [tab, setTab] = useState<TradeTab>(initialTab);
   const [sides, setSides] = useState(() => defaults(initialTab, symbol));
   const [step, setStep] = useState<Step>("edit");
-  const [mode, setMode] = useState<"usd" | "token">("usd");
+  const [modeChoice, setMode] = useState<"usd" | "token">("usd");
   const [input, setInput] = useState("");
   const [slippage, setSlippage] = useState<number>(0.5);
   const [activityId, setActivityId] = useState<string | null>(null);
@@ -91,6 +91,16 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
   const fromBalance = fromToken ? balanceOf(wallet, fromToken) : 0n;
   const connected = isConnected(wallet);
 
+  // A trade with a stock in it waits for the server's yes (services/stocks.ts on the server): no quote and no preview
+  // until this visitor may trade stocks. A stock has no US dollar price here, so an amount of one is typed in the stock.
+  const fromStock = stocks.get(sides.from.symbol) ?? null;
+  const toStock = stocks.get(sides.to.symbol) ?? null;
+  const stockLeg = !!fromStock || !!toStock;
+  const eligibility = useStockEligibility(stockLeg);
+  const pass = useStockPass();
+  const stockBlocked = stockLeg && eligibility.data?.eligible !== true;
+  const mode = fromStock ? "token" : modeChoice;
+
   // What the visitor typed, as base units of the token they pay with.
   const units = useMemo(() => {
     if (!fromToken || !input) return null;
@@ -108,9 +118,9 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
   const [debounced, setDebounced] = useState<bigint | null>(null);
   useEffect(() => { const t = setTimeout(() => setDebounced(netUnits), 350); return () => clearTimeout(t); }, [netUnits]);
 
-  const quoteEnabled = !!fromToken && !!toToken && !!debounced && debounced > 0n && !(fromToken.address === toToken.address && fromChain === toChain);
+  const quoteEnabled = !!fromToken && !!toToken && !!debounced && debounced > 0n && !(fromToken.address === toToken.address && fromChain === toChain) && !stockBlocked;
   const quote = useQuery({
-    queryKey: ["exclip", "quote", fromToken?.address, fromChain, toToken?.address, toChain, debounced?.toString()],
+    queryKey: ["exclip", "quote", fromToken?.address, fromChain, toToken?.address, toChain, debounced?.toString(), stockLeg ? pass?.attestation ?? null : null],
     queryFn: ({ signal }) => fetchQuote({
       tokenSrc: fromToken!.address, tokenSrcChainKey: fromChain!, tokenDst: toToken!.address, tokenDstChainKey: toChain!,
       amount: debounced!.toString(), quoteType: "exact_input",
@@ -187,17 +197,35 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
       <AssetPicker
         title={which === "from" ? "Pay with" : "Receive"}
         bySymbol={bySymbol}
+        stocks={stocks}
         wallet={wallet}
         prices={prices}
         exclude={which === "from" ? sides.to.symbol : sides.from.symbol}
         onBack={() => setStep("edit")}
-        onPick={side => { setSides(s => ({ ...s, [which]: side })); setStep("edit"); }}
+        onPick={side => {
+          // A stock's amount is typed in the stock, so dollars typed for a coin don't carry over to one, or back.
+          if (which === "from" && modeChoice === "usd" && stocks.has(side.symbol) !== !!fromStock) setInput("");
+          setSides(s => ({ ...s, [which]: side }));
+          setStep("edit");
+        }}
       />
     );
   }
 
   if (step === "progress") {
     return <Progress id={activityId} progress={progress} fromChain={fromToken?.chainKey ?? ""} toChain={toToken?.chainKey ?? ""} summary={`${fmtAmount(inAmount)} ${sides.from.symbol} → ${fmtAmount(outAmount)} ${sides.to.symbol}`} />;
+  }
+
+  if (step === "eligibility") {
+    return (
+      <div className="x-trade">
+        <div className="x-sheet-subhead">
+          <button type="button" className="x-icon-btn" onClick={() => setStep("edit")} aria-label="Back to the trade"><ArrowLeft size={20} aria-hidden="true" /></button>
+          <h2 id="x-trade-title" className="x-h3">{ELIGIBILITY_TITLE}</h2>
+        </div>
+        <EligibilityForm termsVersion={config?.stocksTermsVersion ?? null} onDone={() => setStep("edit")} />
+      </div>
+    );
   }
 
   const route = fromChain && toChain ? `${networkMeta(fromChain).short} → ${networkMeta(toChain).short}` : "—";
@@ -221,7 +249,8 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
       : null;
     const signOnly = !!embedded && devSignOnly();
     let cta: ReactNode;
-    if (embeddedProblem) cta = <><p className="x-banner x-banner-warn" role="alert">{embeddedProblem}</p><button type="button" className="x-btn x-btn-primary x-btn-block x-btn-lg" disabled>Confirm with passkey</button></>;
+    if (stockBlocked) cta = <StockAccess eligibility={eligibility} onConfirm={() => setStep("eligibility")} />;
+    else if (embeddedProblem) cta = <><p className="x-banner x-banner-warn" role="alert">{embeddedProblem}</p><button type="button" className="x-btn x-btn-primary x-btn-block x-btn-lg" disabled>Confirm with passkey</button></>;
     else if (signOnly && actions) cta = <button type="button" className="x-btn x-btn-primary x-btn-block x-btn-lg" onClick={confirm} disabled={!outUnits || insufficient || !recipientValid}>Sign with passkey (dev: not broadcast)</button>;
     else if (!config?.tradingEnabled) cta = <button type="button" className="x-btn x-btn-primary x-btn-block x-btn-lg" disabled>Trading is paused</button>;
     else if (!connected || (actions && !signer)) cta = <button type="button" className="x-btn x-btn-primary x-btn-block x-btn-lg" onClick={() => requestWallet({ open: true })}>Connect {networkMeta(fromChain ?? "").short} wallet</button>;
@@ -235,8 +264,8 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
           <h2 id="x-trade-title" className="x-h3">Review {tab === "convert" ? "conversion" : tab === "buy" ? "purchase" : "sale"}</h2>
         </div>
         <div className="x-review-hero">
-          <div className="x-review-leg"><AssetIcon symbol={sides.from.symbol} size={40} network={fromChain ?? undefined} /><div><div className="x-muted x-small">You pay</div><div className="x-strong x-num x-lg">{fmtAmount(inAmount)} {sides.from.symbol}</div><div className="x-muted x-small x-num">{usd(inAmount != null && fromPrice ? inAmount * fromPrice : null)}</div></div></div>
-          <div className="x-review-leg"><AssetIcon symbol={sides.to.symbol} size={40} network={toChain ?? undefined} /><div><div className="x-muted x-small">You receive (est.)</div><div className="x-strong x-num x-lg">{quote.isFetching && !outAmount ? "…" : `${fmtAmount(outAmount)} ${sides.to.symbol}`}</div><div className="x-muted x-small x-num">{usd(outAmount != null && toPrice ? outAmount * toPrice : null)}</div></div></div>
+          <div className="x-review-leg"><AssetIcon symbol={sides.from.symbol} size={40} network={fromChain ?? undefined} /><div><div className="x-muted x-small">You pay</div><div className="x-strong x-num x-lg">{fmtAmount(inAmount)} {sides.from.symbol}</div>{fromStock ? <StockBadge /> : <div className="x-muted x-small x-num">{usd(inAmount != null && fromPrice ? inAmount * fromPrice : null)}</div>}</div></div>
+          <div className="x-review-leg"><AssetIcon symbol={sides.to.symbol} size={40} network={toChain ?? undefined} /><div><div className="x-muted x-small">You receive (est.)</div><div className="x-strong x-num x-lg">{quote.isFetching && !outAmount ? "…" : `${fmtAmount(outAmount)} ${sides.to.symbol}`}</div>{toStock ? <StockBadge /> : <div className="x-muted x-small x-num">{usd(outAmount != null && toPrice ? outAmount * toPrice : null)}</div>}</div></div>
         </div>
         <dl className="x-dl">
           <Row k="Rate" v={rate ? `1 ${sides.from.symbol} = ${fmtAmount(rate)} ${sides.to.symbol}` : "—"} />
@@ -266,6 +295,7 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
         {quoteErr ? <p className="x-banner x-banner-warn" role="alert">{quoteErr}</p> : null}
         {insufficient ? <p className="x-banner x-banner-warn" role="alert">Not enough {sides.from.symbol} on {networkMeta(fromChain ?? "").short}.</p> : null}
         <p className="x-fine">Your trade is an intent: solvers compete to fill it on the SODAX hub, and you receive at least the minimum or the trade doesn't happen. {BRAND.name} never holds your funds.</p>
+        {stockLeg ? <StockDisclaimer /> : null}
         {cta}
       </div>
     );
@@ -301,9 +331,11 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
             />
             {mode === "token" ? <span className="x-amount-unit" aria-hidden="true">{sides.from.symbol}</span> : null}
           </div>
-          <button type="button" className="x-toggle" onClick={() => { setMode(m => (m === "usd" ? "token" : "usd")); setInput(""); }} aria-label={`Switch to entering ${mode === "usd" ? sides.from.symbol : "US dollars"}`}>
-            <ArrowDownUp size={14} aria-hidden="true" /> <span className="x-num">{secondary}</span>
-          </button>
+          {fromStock ? null : (
+            <button type="button" className="x-toggle" onClick={() => { setMode(m => (m === "usd" ? "token" : "usd")); setInput(""); }} aria-label={`Switch to entering ${mode === "usd" ? sides.from.symbol : "US dollars"}`}>
+              <ArrowDownUp size={14} aria-hidden="true" /> <span className="x-num">{secondary}</span>
+            </button>
+          )}
           <div className="x-chips" role="group" aria-label="Use part of your balance">
             {[0.25, 0.5, 1].map(f => (
               <button key={f} type="button" className="x-chip" onClick={() => setFraction(f)} disabled={!connected || fromBalance === 0n}>{f === 1 ? "Max" : `${f * 100}%`}</button>
@@ -312,9 +344,9 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
         </div>
 
         <div className="x-legs">
-          <LegButton label="Pay with" side={sides.from} chainKey={fromChain} token={fromToken} wallet={wallet} onClick={() => setStep("pick-from")} />
+          <LegButton label="Pay with" side={sides.from} stock={fromStock} chainKey={fromChain} token={fromToken} wallet={wallet} onClick={() => setStep("pick-from")} />
           <button type="button" className="x-flip" onClick={flip} aria-label="Swap pay and receive"><ArrowDownUp size={16} aria-hidden="true" /></button>
-          <LegButton label="Receive" side={sides.to} chainKey={toChain} token={toToken} wallet={wallet} onClick={() => setStep("pick-to")} />
+          <LegButton label="Receive" side={sides.to} stock={toStock} chainKey={toChain} token={toToken} wallet={wallet} onClick={() => setStep("pick-to")} />
         </div>
 
         <div className="x-quote-line" aria-live="polite">
@@ -323,11 +355,14 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
             : !fromToken || !toToken ? <span className="x-warn-text">That pair isn't available yet.</span>
             : tooPrecise ? <span className="x-warn-text">{sides.from.symbol} has at most {fromToken.decimals} decimals.</span>
             : insufficient ? <span className="x-warn-text">Not enough {sides.from.symbol} on {networkMeta(fromToken.chainKey).short}.</span>
+            : stockBlocked ? <span className="x-muted">Quotes for tokenised stocks appear once you can trade them.</span>
             : quote.isFetching ? <span className="x-muted"><Loader2 className="x-spin" size={14} aria-hidden="true" /> Finding the best route…</span>
             : quoteErr ? <span className="x-warn-text">{quoteErr}</span>
-            : outAmount != null ? <span>You receive about <strong className="x-num">{fmtAmount(outAmount)} {sides.to.symbol}</strong> <span className="x-muted x-num">({usd(toPrice ? outAmount * toPrice : null)})</span></span>
+            : outAmount != null ? <span>You receive about <strong className="x-num">{fmtAmount(outAmount)} {sides.to.symbol}</strong>{toStock ? null : <> <span className="x-muted x-num">({usd(toPrice ? outAmount * toPrice : null)})</span></>}</span>
             : <span className="x-muted">Enter an amount to see a quote.</span>}
         </div>
+
+        {stockBlocked ? <StockAccess eligibility={eligibility} onConfirm={() => setStep("eligibility")} /> : null}
 
         <button type="button" className="x-btn x-btn-primary x-btn-block x-btn-lg" disabled={!canPreview} onClick={preview}>Preview {tab}</button>
         {!connected ? <p className="x-fine x-center">You can preview without a wallet. You'll connect one to confirm.</p> : null}
@@ -336,18 +371,24 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
   );
 }
 
+/** An asset's name: SODAX's for a tokenised stock, the catalog's otherwise. */
+function nameIn(stocks: ReadonlyMap<string, StockListing>, symbol: string): string {
+  return stocks.get(symbol)?.name ?? nameOf(symbol);
+}
+
 function Row({ k, v }: { k: string; v: ReactNode }) {
   return <div className="x-dl-row"><dt>{k}</dt><dd className="x-num">{v}</dd></div>;
 }
 
-function LegButton({ label, side, chainKey, token, wallet, onClick }: { label: string; side: Side; chainKey: string | null; token: SodaxToken | null; wallet: WalletState; onClick: () => void }) {
+function LegButton({ label, side, stock, chainKey, token, wallet, onClick }: { label: string; side: Side; stock: StockListing | null; chainKey: string | null; token: SodaxToken | null; wallet: WalletState; onClick: () => void }) {
   const bal = token ? balanceOf(wallet, token) : 0n;
+  const name = stock?.name ?? nameOf(side.symbol);
   return (
-    <button type="button" className="x-leg" onClick={onClick} aria-label={`${label}: ${nameOf(side.symbol)}${chainKey ? ` on ${networkMeta(chainKey).name}` : ""}. Change`}>
+    <button type="button" className="x-leg" onClick={onClick} aria-label={`${label}: ${name}${stock ? ` (${STOCK_BADGE.toLowerCase()})` : ""}${chainKey ? ` on ${networkMeta(chainKey).name}` : ""}. Change`}>
       <span className="x-leg-label x-muted x-small">{label}</span>
       <AssetIcon symbol={side.symbol} size={36} network={chainKey ?? undefined} />
       <span className="x-row-main">
-        <span className="x-row-title">{nameOf(side.symbol)}</span>
+        {stock ? <span className="x-stock-title"><span className="x-row-title">{name}</span><StockBadge /></span> : <span className="x-row-title">{name}</span>}
         <span className="x-row-sub">{chainKey ? `on ${networkMeta(chainKey).short}` : "No network"}{token && isConnected(wallet) ? ` · ${fmtAmount(Number(fromUnits(bal, token.decimals)))} ${side.symbol}` : ""}</span>
       </span>
       <ChevronDown size={18} aria-hidden="true" />
@@ -355,9 +396,10 @@ function LegButton({ label, side, chainKey, token, wallet, onClick }: { label: s
   );
 }
 
-function AssetPicker({ title, bySymbol, wallet, prices, exclude, onBack, onPick }: {
+function AssetPicker({ title, bySymbol, stocks, wallet, prices, exclude, onBack, onPick }: {
   title: string;
   bySymbol: Map<string, SodaxToken[]>;
+  stocks: ReadonlyMap<string, StockListing>;
   wallet: WalletState;
   prices: Map<string, { price: number }>;
   exclude: string;
@@ -375,9 +417,9 @@ function AssetPicker({ title, bySymbol, wallet, prices, exclude, onBack, onPick 
         const held = list.reduce((s, t) => s + Number(fromUnits(balanceOf(wallet, t), t.decimals)), 0);
         return { symbol, list, held, usd: held * (prices.get(symbol)?.price ?? 0) };
       })
-      .filter(r => !needle || r.symbol.toLowerCase().includes(needle) || nameOf(r.symbol).toLowerCase().includes(needle) || r.list.some(t => networkMeta(t.chainKey).name.toLowerCase().includes(needle)))
+      .filter(r => !needle || r.symbol.toLowerCase().includes(needle) || nameIn(stocks, r.symbol).toLowerCase().includes(needle) || r.list.some(t => networkMeta(t.chainKey).name.toLowerCase().includes(needle)))
       .sort((a, b) => b.usd - a.usd || (assetMeta(a.symbol) ? 0 : 1) - (assetMeta(b.symbol) ? 0 : 1) || a.symbol.localeCompare(b.symbol));
-  }, [bySymbol, wallet, prices, q]);
+  }, [bySymbol, stocks, wallet, prices, q]);
 
   if (asset) {
     const list = bySymbol.get(asset) ?? [];
@@ -385,7 +427,7 @@ function AssetPicker({ title, bySymbol, wallet, prices, exclude, onBack, onPick 
       <div className="x-trade">
         <div className="x-sheet-subhead">
           <button type="button" className="x-icon-btn" onClick={() => setAsset(null)} aria-label="Back to assets"><ArrowLeft size={20} aria-hidden="true" /></button>
-          <h2 id="x-trade-title" className="x-h3">{nameOf(asset)}: choose a network</h2>
+          <h2 id="x-trade-title" className="x-h3">{nameIn(stocks, asset)}: choose a network</h2>
         </div>
         <ul className="x-list" aria-label="Networks">
           {list.map(t => {
@@ -429,7 +471,9 @@ function AssetPicker({ title, bySymbol, wallet, prices, exclude, onBack, onPick 
             >
               <AssetIcon symbol={r.symbol} size={36} />
               <span className="x-row-main">
-                <span className="x-row-title">{nameOf(r.symbol)}</span>
+                {stocks.has(r.symbol)
+                  ? <span className="x-stock-title"><span className="x-row-title">{nameIn(stocks, r.symbol)}</span><StockBadge /></span>
+                  : <span className="x-row-title">{nameOf(r.symbol)}</span>}
                 <span className="x-row-sub x-net-strip">
                   {r.symbol} ·
                   {r.list.slice(0, 5).map(t => <NetworkBadge key={t.chainKey} chainKey={t.chainKey} size={14} />)}

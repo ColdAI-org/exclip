@@ -5,6 +5,7 @@
  */
 import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { canonicalSymbol } from "./catalog";
+import { stockPassHeaders, stockRefusalText } from "./stock-gate";
 
 export const API_BASE = "/api/exclip";
 export const SODAX_BASE = `${API_BASE}/sodax`;
@@ -20,6 +21,10 @@ export type ExclipPublicConfig = {
   walletOrigin?: string | null;
   /** Until a passkey wallet is backed up, its owner is asked to keep it under this many US dollars. */
   unbackedLimitUsd?: number;
+  /** Whether this server offers tokenised stocks (stocks.enabled). Off: no Stocks screen, and no stock in any list. */
+  stocksEnabled?: boolean;
+  /** The terms the user confirms before trading stocks (stocks.termsVersion), or null while stocks are off. */
+  stocksTermsVersion?: string | null;
 };
 
 export type ChartRange = "1H" | "1D" | "1W" | "1M" | "1Y" | "ALL";
@@ -66,13 +71,16 @@ function friendly(status: number, code: string, fallback: string): string {
     case "SODAX_RATE_LIMITED": return "The exchange network is busy. Trying again in a few seconds usually works.";
     case "TRADING_DISABLED": return "Trading is paused on this server. Quotes still work.";
     default:
+      if (status === 451) return stockRefusalText({ status, code }) ?? (fallback || "This isn't available to you here.");
       if (status >= 500) return "The exchange network had a problem. Try again.";
       return fallback || "Something went wrong. Try again.";
   }
 }
 
 export async function api<T>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
-  const headers: Record<string, string> = { accept: "application/json" };
+  // The stock check reads the self-certification on SODAX requests and on its own routes; nothing else gets it.
+  const stockAware = path.startsWith(`${SODAX_BASE}/`) || path.startsWith(`${API_BASE}/stocks/`);
+  const headers: Record<string, string> = { accept: "application/json", ...(stockAware ? stockPassHeaders() : {}) };
   if (init.body !== undefined) headers["content-type"] = "application/json";
   const res = await fetch(path, {
     method: init.method ?? (init.body === undefined ? "GET" : "POST"),

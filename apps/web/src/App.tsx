@@ -7,12 +7,14 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { Shell } from "./components/Shell";
 import { EmptyState } from "./components/primitives";
+import { useExclipConfig } from "./lib/api";
 import { BRAND, setDocumentMeta } from "./lib/brand";
 import { assetMeta, pairOf, QUOTE_SYMBOL } from "./lib/catalog";
 import Home from "./pages/Home";
 import AssetPage from "./pages/AssetPage";
 import Advanced from "./pages/Advanced";
 import Portfolio from "./pages/Portfolio";
+import Stocks from "./pages/Stocks";
 
 type Screen = { key: string; title: string; description: string; render: () => ReactNode };
 
@@ -25,7 +27,9 @@ function decode(segment: string): string {
   }
 }
 
-function screenFor(path: string): Screen {
+/** `stocks`: whether this server offers tokenised stocks, or undefined until its configuration has loaded. Off, /stocks
+ * is the 404 like any other unknown path. */
+function screenFor(path: string, stocks: boolean | undefined): Screen {
   const name = BRAND.name;
   const seg = path.split("/").slice(1).map(decode);
   const [section, param] = seg;
@@ -46,6 +50,11 @@ function screenFor(path: string): Screen {
     return { key: `trade:${param ?? ""}`, title: `${label} advanced trade · ${name}`, description: "Market and limit orders as SODAX intents, with live best-route pricing and your open orders.", render: () => <Advanced pair={param} /> };
   }
   if (section === "portfolio" && seg.length === 1) return { key: "portfolio", title: `Portfolio · ${name}`, description: "Your holdings across every network, allocation and activity, with CSV export.", render: () => <Portfolio /> };
+  if (section === "stocks" && seg.length === 1 && stocks !== false) {
+    // Nothing that names stocks until the server says they're on.
+    if (stocks === undefined) return { key: "stocks", title: name, description: "", render: () => <div className="x-page" aria-busy="true" /> };
+    return { key: "stocks", title: `Tokenised stocks · ${name}`, description: "Tokenised stocks on SODAX, traded from your own wallet where they're offered.", render: () => <Stocks /> };
+  }
   return {
     key: "404",
     title: `Page not found · ${name}`,
@@ -65,7 +74,8 @@ window.addEventListener("popstate", () => {
 export default function App() {
   const [location] = useLocation();
   const path = location.replace(/\/+$/, "") || "/";
-  const screen = screenFor(path);
+  const { data: config, isError } = useExclipConfig();
+  const screen = screenFor(path, config ? !!config.stocksEnabled : isError ? false : undefined);
   const { key, title, description } = screen;
   const shown = useRef(key);
 

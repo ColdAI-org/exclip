@@ -1,6 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { ArrowLeftRight, Briefcase, CandlestickChart, Home, Moon, Search, Sun } from "lucide-react";
+import { ArrowLeftRight, Briefcase, CandlestickChart, Home, Landmark, Moon, Search, Sun } from "lucide-react";
 import { useExclipConfig } from "../lib/api";
 import { BRAND } from "../lib/brand";
 import { setLocale, shortAddress } from "../lib/format";
@@ -19,8 +19,14 @@ import { Sheet } from "./Sheet";
 const NAV = [
   { href: "/", label: "Home", icon: Home, match: (p: string) => p === "/" || p.startsWith("/asset/") },
   { href: "/trade", label: "Trade", icon: CandlestickChart, match: (p: string) => p === "/trade" || p.startsWith("/trade/") },
+  { href: "/stocks", label: "Stocks", icon: Landmark, match: (p: string) => p === "/stocks", stocks: true },
   { href: "/portfolio", label: "Portfolio", icon: Briefcase, match: (p: string) => p === "/portfolio" },
 ] as const;
+
+/** The main links. Stocks shows only once the server says it offers them (stocks.enabled). */
+function navFor(stocksEnabled: boolean | undefined) {
+  return NAV.filter(n => !("stocks" in n) || stocksEnabled === true);
+}
 
 // The wallet SDKs (and everything they pull in) load only through this import, after Connect or Preview, so they stay
 // out of the first-load bundle. The polyfills must run before the SDK modules evaluate, hence the two steps.
@@ -108,6 +114,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const wallet = useWallet();
   const { data: config } = useExclipConfig();
   const walletOrigin = embeddedOrigin(config);
+  const nav = navFor(config?.stocksEnabled);
   useIntentWatcher();
 
   useEffect(() => {
@@ -126,7 +133,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </Link>
         <nav aria-label="Main">
           <ul className="x-rail-nav">
-            {NAV.map(n => {
+            {nav.map(n => {
               const on = n.match(path);
               return (
                 <li key={n.href}>
@@ -178,7 +185,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
 
       <nav className="x-tabbar" aria-label="Main">
-        {NAV.map(n => {
+        {nav.map(n => {
           const on = n.match(path);
           return (
             <Link key={n.href} href={n.href} className={`x-tabbar-link${on ? " is-on" : ""}`} aria-current={on ? "page" : undefined}>
