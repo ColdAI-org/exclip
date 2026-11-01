@@ -6,6 +6,9 @@ dist/
 *.tsbuildinfo
 coverage/
 
+# Screenshots under your own brand (pnpm run screenshots --brand)
+/screenshots/
+
 # Local configuration and secrets (copy exclip.config.example.ts to exclip.config.ts)
 exclip.config.ts
 .env

@@ -73,7 +73,7 @@ From the repository root:
 | `pnpm test` | Runs every package's tests |
 | `pnpm run brand` | Checks the brand kit's SVGs, then renders the review sheet, the app's logo and its icons |
 | `pnpm run brand:outline` | Outlines the wordmark again from Inter Bold |
-| `pnpm run screenshots` | Takes the README's screenshots against a stand-in for SODAX ([screenshots](#screenshots)) |
+| `pnpm run screenshots` | Takes the README's screenshots against a stand-in for SODAX ([screenshots](#screenshots)). With `--brand`, under your own brand |
 | `pnpm run contrast` | Checks `brand.colors` in your config against [the contrast rule](branding.md#the-contrast-rule) |
 | `pnpm run docs:links` | Checks every relative link, anchor and image in the Markdown files |
 
@@ -251,6 +251,11 @@ no SODAX key and no network:
 - The run uses `tools/screenshots/screenshots.config.ts`, which sets
   nothing, so the screenshots show ExClip's own name, logo and colours
   whatever your `exclip.config.ts` says.
+
+`pnpm run screenshots --brand` takes the same screenshots under your
+`exclip.config.ts` (or the file `EXCLIP_CONFIG` names): your name, operator,
+logo, colours, fee and origins. They go to `screenshots/` at the root, which
+Git ignores, so `docs/media` keeps ExClip's.
 
 It drives Chromium through Playwright. Install it once with
 `pnpm exec playwright install chromium`. If it won't start, the script

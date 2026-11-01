@@ -42,7 +42,7 @@ const wallet = {
 const root = document.getElementById("app")!;
 const session: Session = {
   request,
-  // The page that asked: capture.mjs puts the example app origin here.
+  // The page that asked: capture.mjs puts the app origin here (the example one, unless --brand).
   origin: root.dataset.opener!,
   reply: () => {},
   fail: () => {},

@@ -50,6 +50,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   setting removes it.
 - `pnpm run contrast`, which checks `brand.colors` in your config against
   the contrast rule and fails when a pairing is below 4.5:1.
+- `pnpm run screenshots --brand`, which takes the same screenshots under
+  the brand, fee and origins in your config and saves them to the
+  git-ignored `screenshots/`.
 
 ### Changed
 

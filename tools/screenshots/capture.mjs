@@ -3,10 +3,15 @@
  * Captures the README screenshots: five screens, each in the dark and the light theme, at desktop and phone size.
  *
  *   pnpm run screenshots
+ *   pnpm run screenshots --brand
  *
  * Writes docs/media/{home,trade,portfolio,asset,approval}-{dark,light}-{desktop,phone}.png. It starts the web app and
  * the wallet on their usual dev servers (stop `pnpm dev` first; apps/server isn't needed) and drives them in headless
  * Chromium through Playwright. Re-run it after a visible UI change and commit the PNGs.
+ *
+ * With --brand it takes the same screenshots under the repository's own config instead: exclip.config.ts, or the file
+ * EXCLIP_CONFIG names, with its name, operator, logo, colours, fee and origins. They go to screenshots/, which git
+ * ignores, so a rebranded copy never overwrites the README's.
  *
  * Nothing goes to a network. The browser resolves no host but localhost. Every /api/exclip call is answered from
  * fixtures/, a made-up snapshot of 2026-10-30 12:00 UTC (not market data), and the browser's clock is pinned to that
@@ -21,19 +26,23 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 import { DEV_ORIGINS, PLACEHOLDER_ORIGINS } from "@exclip/config";
+import { loadPublicConfig } from "@exclip/config/node";
 import { ASSETS, canonicalSymbol } from "../../apps/web/src/lib/catalog.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const HERE = join(ROOT, "tools/screenshots");
-const OUT = join(ROOT, "docs/media");
+/** With --brand, the repository's own config. */
+const OWN = process.argv.includes("--brand") ? await loadPublicConfig() : null;
+const OUT = join(ROOT, OWN ? "screenshots" : "docs/media");
 
 // Read by the apps' vite.config.ts: ExClip's own name, logo and colours, whatever the repository's config says.
-process.env.EXCLIP_CONFIG = relative(ROOT, join(HERE, "screenshots.config.ts"));
+if (!OWN) process.env.EXCLIP_CONFIG = relative(ROOT, join(HERE, "screenshots.config.ts"));
 
 const APP = DEV_ORIGINS.app;
 const WALLET = DEV_ORIGINS.wallet;
-/** Where the review is shown from: the example wallet origin, opened by the example app origin. */
-const WALLET_PAGE = PLACEHOLDER_ORIGINS.wallet;
+/** Where the review is shown from: the wallet origin, opened by the app origin. The examples, unless --brand. */
+const ORIGINS = OWN?.origins ?? PLACEHOLDER_ORIGINS;
+const WALLET_PAGE = ORIGINS.wallet;
 const SNAPSHOT = Date.parse("2026-10-30T12:00:00Z");
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -49,7 +58,11 @@ const POPUP = { viewport: { width: 420, height: 720 }, deviceScaleFactor: 1 };
 /* ------------------------------------------------------------------ fixtures */
 
 const fixture = (name) => JSON.parse(readFileSync(join(HERE, "fixtures", name), "utf8"));
-const CONFIG = fixture("config.json");
+/** /api/exclip/config. With --brand it carries the configured fee, as apps/server's publicConfig would. */
+const CONFIG = {
+  ...fixture("config.json"),
+  ...(OWN && { partnerFeeBps: OWN.fees.partnerFee?.percentage ?? 0, feeReceiver: OWN.fees.partnerFee?.address ?? null }),
+};
 const ACCOUNT = fixture("account.json");
 const MARKET = new Map(fixture("markets.json").rows.map((r) => [r.symbol, r]));
 const TOKENS = Object.fromEntries(
@@ -241,7 +254,7 @@ const WALLET_HTML = (() => {
     .map((src) => `<script type="module" src="${src}"></script>`)
     .join("\n    ");
   const html = page
-    .replace(`<main id="app"`, `<main id="app" data-opener="${PLACEHOLDER_ORIGINS.app}"`)
+    .replace(`<main id="app"`, `<main id="app" data-opener="${ORIGINS.app}"`)
     .replace(`<script type="module" src="/src/main.ts"></script>`, scripts);
   if (!html.includes("data-opener") || !html.includes("approval.ts")) throw new Error("apps/wallet/index.html has changed: update WALLET_HTML");
   return html;
