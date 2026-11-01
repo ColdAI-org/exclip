@@ -104,6 +104,12 @@ work as you meant:
   and rebuild the wallet, or set the fee to `0`
   ([why it fails closed](fees.md#why-it-fails-closed)).
 
+The builds also print notices about the libraries they bundle, such as
+modules "externalized for browser compatibility", `/*#__PURE__*/` comments
+that Rollup removes, and "Some chunks are larger than 500 kB". They come
+from those libraries, not from your settings: a build with no config at
+all prints them too. Leave them.
+
 ## Quotes and trading
 
 The app turns the server's errors into short messages:

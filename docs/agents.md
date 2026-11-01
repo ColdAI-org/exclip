@@ -13,8 +13,9 @@ domains, the server, the SODAX key and your legal pages stay with you.
 
 - A clone of the repository, with Node 24 and pnpm, and `pnpm install` run
   once ([set up](development.md#set-up)).
-- Your logo as a file in the repository's folder, ideally a square SVG or
-  PNG.
+- Your logo as a file in `apps/web/public`, the folder the app serves,
+  ideally a square SVG or PNG ([the logo](branding.md#the-logo)). If you
+  leave it somewhere else, the agent moves or copies it there.
 - If you'll charge a fee: the EVM address that receives it. Taking a fee on
   swaps can make you a provider of a financial service, so check what it
   means where you operate ([fees](fees.md#turn-a-fee-on)).
@@ -38,7 +39,7 @@ notice. Without them, the agent leaves those settings for you.
 | What | Where |
 |---|---|
 | Name, operator, colours, logo path and fee | `exclip.config.ts`, a copy of `exclip.config.example.ts`. Git ignores it |
-| Your logo | Copied into `apps/web/public`, for example `apps/web/public/acme.svg` |
+| Your logo | In `apps/web/public`, for example `apps/web/public/acme.svg` |
 | The fee receiver | Added to `apps/wallet/fee-receivers.json`, the passkey wallet's list of addresses a fee may go to |
 | The test that expects that list to be empty | `apps/wallet/test/build-config.test.ts`, changed to expect your receiver |
 
@@ -54,9 +55,12 @@ of the footer: it is ExClip's attribution notice, and every copy shows it
 - `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm run docs:links`.
 - The build, `NODE_OPTIONS=--max-old-space-size=6144 pnpm build`. Without
   domains, the wallet build warns that the origins are still the examples:
-  that's expected until you set yours.
+  that's expected until you set yours. So are the notices about libraries
+  around it ([the build fails or warns](troubleshooting.md#the-build-fails-or-warns)).
 - `pnpm run screenshots --brand`, which saves 20 screenshots of your
   rebrand to `screenshots/`, in both themes, at desktop and phone size.
+  They show your name, logo and colour, but not your operator or your fee:
+  you check those yourself (below).
 
 It ends with a summary of what it changed, the contrast ratios, the
 results, and what's left for you.
@@ -65,8 +69,10 @@ results, and what's left for you.
 
 The agent can't do these, or shouldn't:
 
-- **The SODAX key.** Set it as `SODAX_API_KEY` in the server's environment,
-  never in `exclip.config.ts` and never in a commit or a chat.
+- **The SODAX key.** Set it as `SODAX_API_KEY` in the server's
+  environment, which is better than `sodax.apiKey` in production
+  ([environment variables](configuration.md#environment-variables)). Never
+  put it in a commit or a chat.
 - **Domains, DNS and TLS.** Pick two hosts, the wallet on one of its own,
   and set them in `origins`. The wallet's host is for good: passkeys are
   bound to it ([for operators](wallet.md#for-operators)).
@@ -100,10 +106,15 @@ The agent can't do these, or shouldn't:
      `10` is 0.1 %;
    - `fees.receiver`: your address again;
    - `origins`: your domains, or the examples if you gave none;
-   - `sodax.apiKey`: empty. No key or password belongs in this file.
+   - `sodax.apiKey`: empty. The agent never handles your key.
 4. Look through the screenshots in `screenshots/`: your name, logo and
-   colour in both themes, and the wallet window's footer in the approval
-   screenshots.
+   colour in both themes, and "Powered by ExClip" at the end of the wallet
+   window's footer in the approval screenshots.
+5. Run `pnpm dev` and open `http://localhost:5173`. The footer at the
+   bottom of the page names your operator, for example "Acme Swap is run by
+   Acme Ltd.", and ends with "Powered by ExClip".
+   `http://localhost:5173/api/exclip/config` shows your fee:
+   `"partnerFeeBps": 10` for 0.1 %, and your address as `feeReceiver`.
 
 ## Check before you go live
 

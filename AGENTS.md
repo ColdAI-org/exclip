@@ -48,6 +48,13 @@ the repository root.
   than Node allows by default on a machine with less than 16 GB of memory.
   CI gives it 6 GB, as above. With less memory free, 4096 is enough
   ([troubleshooting](docs/troubleshooting.md#the-build-fails-or-warns)).
+  If you can't set `NODE_OPTIONS` before a command, run `pnpm build`: on a
+  machine with 16 GB of memory or more, Node's default is enough.
+- **The build's notices.** The builds print notices about their
+  dependencies, such as modules "externalized for browser compatibility",
+  `/*#__PURE__*/` comments that Rollup removes, and chunks larger than
+  500 kB. They're expected: change nothing for them
+  ([troubleshooting](docs/troubleshooting.md#the-build-fails-or-warns)).
 - **Screenshots** start their own dev servers on ports 5173 and 5311, so
   stop `pnpm dev` first. They need a browser: run
   `pnpm exec playwright install chromium` once, or the script tries Google
@@ -98,11 +105,12 @@ nothing else. Follow the steps in order, and end with step 9.
 
 If `exclip.config.ts` doesn't exist at the root, copy
 `exclip.config.example.ts` to it. If `EXCLIP_CONFIG` is set, edit the file
-it names instead. Keep the `satisfies ExclipConfigInput` line, and write
-plain values: Node loads the file as it is, so no enums or namespaces
-([configuration](docs/configuration.md)). Leave `sodax.apiKey` empty: the
-key belongs in the server's environment (step 9). Git ignores the file, so
-`git diff` won't show your changes to it.
+it names instead. `pnpm run contrast` starts by naming the file it reads,
+so it shows which one is in use. Keep the `satisfies ExclipConfigInput`
+line, and write plain values: Node loads the file as it is, so no enums or
+namespaces ([configuration](docs/configuration.md)). Leave `sodax.apiKey`
+empty: the key belongs in the server's environment (step 9). Git ignores
+the file, so `git diff` won't show your changes to it.
 
 ### 2. Set the brand
 
@@ -129,9 +137,14 @@ window keeps its own palette, whatever the colours
 
 ### 3. Add the logo
 
-Copy the file you were given into `apps/web/public` under its own name, for
-example `apps/web/public/acme.svg`, and set `brand.logo` to `"/acme.svg"`.
-If you can't find the file, ask for it. Don't draw one unless asked.
+The logo goes in `apps/web/public` under its own name, for example
+`apps/web/public/acme.svg`, and `brand.logo` is then `"/acme.svg"`. If the
+file is already there, use it as it is. If it's elsewhere in the
+repository, such as the root, move it there, so that `git status` lists one
+copy, not two. If it's outside the repository, copy it. Move or copy it
+with the shell (`mv`, `cp`) rather than writing it out again: a retyped SVG
+can lose a character, and only the screenshots would show it. If you can't
+find the file, ask for it. Don't draw one unless asked.
 
 - A square `.svg`, `.png`, `.ico` or `.webp` works best. The wallet build
   inlines it into the wallet page and stops if it's missing
@@ -216,16 +229,22 @@ Run each of these, and fix what fails:
 1. `pnpm run contrast`: all six pairings `ok`.
 2. `pnpm typecheck` (it typechecks a root `exclip.config.ts` too),
    `pnpm lint`, `pnpm test` and `pnpm run docs:links`.
-3. `NODE_OPTIONS=--max-old-space-size=6144 pnpm build`. The build checks the
-   config first and stops on a bad value. Then read the wallet build's
-   warnings ([what they mean](docs/troubleshooting.md#the-build-fails-or-warns)):
+3. `NODE_OPTIONS=--max-old-space-size=6144 pnpm build`, or `pnpm build`
+   ([the build's heap](#commands)). The build checks the config first and
+   stops on a bad value. Then read the wallet build's warnings, the lines
+   that start `exclip.config.ts:`
+   ([what they mean](docs/troubleshooting.md#the-build-fails-or-warns)):
    one about example origins is expected while there are no domains; one
-   about the fee receiver means step 6 isn't done.
+   about the fee receiver means step 6 isn't done. The dependency notices
+   around them are expected too.
 4. In the build, `apps/web/dist/manifest.webmanifest` has the new name and
    logo.
 5. `pnpm run screenshots --brand`, then look at the PNGs in `screenshots/`:
-   the name, logo and accent in both themes, and the wallet window's footer
-   in the approval shots, with the operator and "Powered by ExClip".
+   the name, logo and accent in both themes, and "Powered by ExClip" at the
+   end of the wallet window's footer in the approval shots. They don't
+   show the operator or the fee: the app's footer is below the fold, the
+   trade shot is the quote before the review, and the approval's swap
+   carries no fee. Say so when you hand back.
 
 Don't commit unless you're asked to. When you are, commit the allow-list
 and its test together, signed off, plus the logo if the person wants it in
@@ -234,13 +253,18 @@ their copy of the repository. `exclip.config.ts` stays out of Git.
 ### 9. Hand back
 
 End with a short summary: what you changed, including `exclip.config.ts`
-(which `git diff` doesn't show), the six contrast ratios, the result of
-each check, and what the person still has to do. You can't, or shouldn't,
-do these yourself:
+(which `git diff` doesn't show), the six contrast ratios, and the result of
+each check. Say where to see what the screenshots leave out: with
+`pnpm dev` running, the footer at the bottom of `http://localhost:5173`
+names the operator, and `http://localhost:5173/api/exclip/config` shows the
+fee as `partnerFeeBps` and `feeReceiver`. Then list what the person still
+has to do. You can't, or shouldn't, do these yourself:
 
-- **The SODAX API key.** They set `SODAX_API_KEY` in the server's
-  environment, never in `exclip.config.ts` or a commit. Without it, quotes
-  answer "Trading isn't connected".
+- **The SODAX API key.** They set it as `SODAX_API_KEY` in the server's
+  environment, which the docs prefer to `sodax.apiKey` in production
+  ([environment variables](docs/configuration.md#environment-variables)).
+  It never goes in a commit. Without it, quotes answer "Trading isn't
+  connected".
 - **Domains.** Two hosts, the wallet on one of its own. Then `origins` and a
   rebuild of both apps. The wallet's host is for good.
 - **DNS and TLS** for both hosts, and the proxy or CDN in front, sending the
