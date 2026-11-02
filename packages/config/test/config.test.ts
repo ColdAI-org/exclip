@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import example from "../../../exclip.config.example.ts";
+import { EMPTY_FEE_ALLOW_LIST, parseFeeAllowList } from "../src/fee-split.ts";
 import {
   ConfigError,
   DEV_ORIGINS,
@@ -26,17 +27,32 @@ import {
   type Env,
   type ExclipConfigInput,
 } from "../src/index.ts";
-import { findRepoRoot, loadExclipConfig, loadPublicConfig } from "../src/node.ts";
+import { FEE_ALLOW_LIST_FILE, findRepoRoot, loadExclipConfig, loadPublicConfig, readFeeAllowList } from "../src/node.ts";
 
 const RECEIVER = "0x1111111111111111111111111111111111111111";
+/** The platform and the operator of the local dry run's sample split (contracts/fee-split/README.md). */
+const PLATFORM = RECEIVER;
+const OPERATOR = "0x2222222222222222222222222222222222222222";
+type VectorFactory = { address: string; platform: string; platformRate: number; maxTotalRate: number; initCodeHash: string };
+/** The factories real FeeSplitterFactory contracts gave on anvil (contracts/fee-split/script/Vectors.s.sol), listed as
+ * a reviewer lists them. The first is the dry run's: the platform 0x1111…1111 at 875, a cap of 1,875. */
+const VECTOR_FACTORIES = (JSON.parse(
+  readFileSync(new URL("../../../contracts/fee-split/test/vectors/splitters.json", import.meta.url), "utf8"),
+) as { factories: VectorFactory[] }).factories.map(({ address, platform, platformRate, maxTotalRate, initCodeHash }, i) => (
+  { address, platformName: `Platform ${i + 1}`, platform, platformRate, maxTotalRate, initCodeHash }
+));
+const ALLOW_LIST_JSON = JSON.stringify({ receivers: [], factories: VECTOR_FACTORIES });
+const ALLOW_LIST = parseFeeAllowList(ALLOW_LIST_JSON);
+const [DRY_RUN, , NO_PLATFORM_FEE, NO_ROOM] = ALLOW_LIST.factories.map((f) => f.address) as [string, string, string, string];
+const SPLIT = { factory: DRY_RUN, operator: OPERATOR, operatorRate: 100 };
 const SECRET = "sodax-test-key-must-never-leave-the-server";
 /** Stocks switched on as the documentation shows, and the two secrets the server then needs. */
 const STOCKS_ON = { enabled: true, countryHeader: "cf-ipcountry" } as const;
 const STOCK_SECRETS = { EXCLIP_EDGE_SECRET: "edge-test-secret-not-real", EXCLIP_ATTESTATION_SECRET: "a".repeat(32) };
 
-function problemsOf(input: unknown, env: Env = {}): readonly string[] {
+function problemsOf(input: unknown, env: Env = {}, allowList = EMPTY_FEE_ALLOW_LIST): readonly string[] {
   try {
-    resolveConfig(input as ExclipConfigInput, env);
+    resolveConfig(input as ExclipConfigInput, env, allowList);
   } catch (e) {
     assert.ok(e instanceof ConfigError);
     return e.problems;
@@ -169,6 +185,96 @@ test("a receiver without a rate pins nothing", () => {
   const { config } = resolveConfig({ fees: { receiver: RECEIVER } });
   assert.equal(config.fees.receiver, RECEIVER);
   assert.equal(config.fees.partnerFee, null);
+});
+
+test("fee split: the factory's values from the allow-list, the operator's from the config, and the splitter they give", () => {
+  const { config } = resolveConfig({ fees: { split: SPLIT } }, {}, ALLOW_LIST);
+  assert.deepEqual(config.fees.split, {
+    factory: DRY_RUN,
+    // The README's sample splitter, which the dry-run factory itself predicted and created.
+    splitter: "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe",
+    platformName: "Platform 1",
+    platform: PLATFORM,
+    platformRate: 875,
+    operator: OPERATOR,
+    operatorRate: 100,
+    totalRate: 975,
+    stockFee: null,
+  });
+  assert.equal(config.fees.partnerFee, null, "no plain fee");
+  assert.equal(resolveConfig().config.fees.split, null, "no split by default");
+
+  // Lower case in, EIP-55 out. The example's partnerFeeBps 0 and receiver null aren't a plain fee.
+  const lower = resolveConfig({ fees: { partnerFeeBps: 0, receiver: null, split: { ...SPLIT, factory: DRY_RUN.toLowerCase() } } }, {}, ALLOW_LIST);
+  assert.equal(lower.config.fees.split?.factory, DRY_RUN);
+  assert.equal(lower.config.fees.split?.splitter, "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe");
+  // From only the platform's rate to the operator's 1 % on top, the 1.875 % the factory allows in all.
+  for (const [operatorRate, totalRate] of [[0, 875], [1, 876], [1_000, 1_875]] as const) {
+    assert.equal(resolveConfig({ fees: { split: { ...SPLIT, operatorRate } } }, {}, ALLOW_LIST).config.fees.split?.totalRate, totalRate);
+  }
+  // The operator's own plain fee on stock swaps, paid straight to its address.
+  const stocks = resolveConfig({ fees: { split: { ...SPLIT, stockFeeBps: 25 } } }, {}, ALLOW_LIST).config.fees.split;
+  assert.deepEqual(stocks?.stockFee, { address: OPERATOR, percentage: 25 });
+});
+
+test("fee split: refused unless the allow-list lists the factory, and wherever the factory would refuse it", () => {
+  const only = (input: unknown, allowList = ALLOW_LIST) => {
+    const problems = problemsOf(input, {}, allowList);
+    assert.equal(problems.length, 1, problems.join("\n"));
+    return problems[0]!;
+  };
+  const notListed = /fees\.split\.factory 0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519 is not listed in apps\/wallet\/fee-receivers\.json/;
+  assert.match(only({ fees: { split: SPLIT } }, EMPTY_FEE_ALLOW_LIST), notListed);
+  assert.match(only({ fees: { split: { ...SPLIT, factory: DRY_RUN.toLowerCase() } } }, EMPTY_FEE_ALLOW_LIST), notListed);
+  // The factory's four refusals, from the listed platform, rate and cap.
+  assert.match(only({ fees: { split: { ...SPLIT, operator: `0x${"0".repeat(40)}` } } }), /fees\.split: .*\(ZeroAddress\)/);
+  assert.match(only({ fees: { split: { ...SPLIT, operator: PLATFORM } } }), /fees\.split: .*\(OperatorIsPlatform\)/);
+  assert.match(only({ fees: { split: { ...SPLIT, factory: NO_ROOM, operatorRate: 1 } } }), /operatorRate 1 is above the 0 the factory leaves an operator \(RateTooHigh\)/);
+  assert.match(only({ fees: { split: { ...SPLIT, factory: NO_PLATFORM_FEE, operatorRate: 0 } } }), /\(ZeroRates\)/);
+  // The operator's limit, whatever room the factory leaves: NO_PLATFORM_FEE's cap would allow 1,875.
+  for (const operatorRate of [1_001, 1_875, -1, 2.5, "100", null]) {
+    assert.match(only({ fees: { split: { ...SPLIT, factory: NO_PLATFORM_FEE, operatorRate } } }), /fees\.split\.operatorRate must be a whole number from 0 to 1000/, String(operatorRate));
+  }
+  assert.match(only({ fees: { split: { factory: DRY_RUN, operator: OPERATOR } } }), /fees\.split\.operatorRate must be/);
+  // One kind of fee or the other.
+  const both = /fees\.split can't be set with fees\.partnerFeeBps or fees\.receiver/;
+  assert.match(only({ fees: { partnerFeeBps: 10, receiver: RECEIVER, split: SPLIT } }), both);
+  assert.match(only({ fees: { receiver: RECEIVER, split: SPLIT } }), both);
+  // Addresses: 0x and 40 hex digits, with a valid checksum when in mixed case.
+  assert.match(only({ fees: { split: { ...SPLIT, factory: "0x5B73C5498c1E3b4dbA84de0F1833c4a029d90519" } } }), /fees\.split\.factory must be 0x and 40 hex digits/);
+  assert.match(only({ fees: { split: { ...SPLIT, operator: "0x2222" } } }), /fees\.split\.operator must be/);
+  assert.match(only({ fees: { split: { ...SPLIT, stockFeeBps: 101 } } }), /fees\.split\.stockFeeBps must be a whole number from 0 to 100/);
+  assert.match(only({ fees: { split: "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe" } }), /fees\.split must be an object, or null/);
+  assert.deepEqual(problemsOf({ fees: { split: { ...SPLIT, splitter: "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe" } } }, {}, ALLOW_LIST), [
+    "unknown setting fees.split.splitter",
+  ]);
+  assert.equal(resolveConfig({ fees: { split: null } }, {}, ALLOW_LIST).config.fees.split, null);
+});
+
+test("the example's commented split is valid once uncommented, with its factory listed", async () => {
+  const source = readFileSync(new URL("../../../exclip.config.example.ts", import.meta.url), "utf8");
+  const block = source.match(/^ *\/\/ {3}split: \{\n(?: *\/\/ {5}.*\n)+ *\/\/ {3}\},$/m)?.[0];
+  assert.ok(block, "the example shows a split");
+  const module = `export default { ${block.replace(/^ *\/\/ {3}/gm, "")} };`;
+  const { default: fees } = (await import(`data:text/javascript,${encodeURIComponent(module)}`)) as { default: ExclipConfigInput["fees"] };
+  assert.equal(resolveConfig({ fees }, {}, ALLOW_LIST).config.fees.split?.splitter, "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe");
+  assert.match(problemsOf({ fees }).join("\n"), /is not listed/, "the repository's allow-list lists no factory");
+});
+
+test("the config check reads the allow-list at the root: a split needs its factory there, and a broken file stops it", async () => {
+  // The repository's own: nothing listed.
+  assert.deepEqual(readFeeAllowList(), EMPTY_FEE_ALLOW_LIST);
+  assert.deepEqual(readFeeAllowList(findRepoRoot()), parseFeeAllowList(readFileSync(join(findRepoRoot(), FEE_ALLOW_LIST_FILE), "utf8")));
+
+  const dir = configDir(`export default { fees: { split: ${JSON.stringify(SPLIT)} } };\n`);
+  await assert.rejects(loadExclipConfig({}, dir), (e: unknown) => e instanceof ConfigError && /is not listed/.test(e.problems.join()));
+  mkdirSync(join(dir, "apps", "wallet"), { recursive: true });
+  writeFileSync(join(dir, FEE_ALLOW_LIST_FILE), ALLOW_LIST_JSON);
+  assert.equal((await loadExclipConfig({}, dir)).config.fees.split?.splitter, "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe");
+  assert.equal((await loadPublicConfig({}, dir)).fees.split?.totalRate, 975);
+
+  writeFileSync(join(dir, FEE_ALLOW_LIST_FILE), JSON.stringify({ receivers: [], factories: [{ ...VECTOR_FACTORIES[0], initCodeHash: `0x${"0".repeat(64)}` }] }));
+  await assert.rejects(loadExclipConfig({}, dir), (e: unknown) => e instanceof ConfigError && /^fee-receivers\.json: factories\[0\]: initCodeHash/.test(e.problems[0]!));
 });
 
 test("origins: exact https origins, and the wallet on a host of its own", () => {

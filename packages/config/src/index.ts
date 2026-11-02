@@ -9,6 +9,10 @@
  * Erasable TypeScript only and no Node imports: Node loads this file directly when Vite imports it from an app's
  * vite.config.ts, and its types are shared with browser code. Reading the file from disk lives in `./node.ts`. */
 
+import {
+  ADDRESS_RULE, EMPTY_FEE_ALLOW_LIST, OPERATOR_RATE_MAX, checksumAddress, describeSplitRefusal, isAddress, isOperatorRate, predictSplitter,
+  sameAddress, splitRefusal, type FeeAllowList,
+} from "./fee-split.ts";
 import { ISO_COUNTRY_CODES, STOCKS_ATTESTATION_HEADER, STOCKS_EDGE_SECRET_HEADER } from "./stocks.ts";
 
 export * from "./headers.ts";
@@ -41,6 +45,23 @@ export type ExclipConfigInput = {
     /** The EVM address that receives the fee; required when partnerFeeBps is above 0. The passkey wallet must also
      * list it in apps/wallet/fee-receivers.json, or it refuses every swap that carries a fee. */
     receiver?: string | null;
+    /** A fee split instead of the plain fee above, never with it (docs/fee-split.md): the fee on each swap goes to the
+     * operator's splitter on Sonic, which pays the platform its rate and the operator its own. The factory must be
+     * listed in apps/wallet/fee-receivers.json, which fixes the platform's address, its rate and the cap. Default:
+     * none. */
+    split?: {
+      /** The FeeSplitterFactory's address on Sonic. */
+      factory: string;
+      /** The operator's address on Sonic, where its share is paid. */
+      operator: string;
+      /** The operator's rate per 100,000 of the amount sold, on top of the platform's: 100 is 0.1 %, at most 1,000
+       * (1 %). 0 charges only the platform's fee. */
+      operatorRate: number;
+      /** The operator's own fee in basis points, at most 100 (1 %), on a swap with a tokenised stock on either side:
+       * those carry no platform fee and never go to the splitter. It is paid straight to `operator`, which the passkey
+       * wallet must then list as a receiver. Default 0: no fee on those swaps. */
+      stockFeeBps?: number;
+    } | null;
   };
   /** Production origins: exact `https://host`, lower case, no path or trailing slash. Development always uses
    * DEV_ORIGINS. The wallet needs a host of its own (never the app's host or a parent of it). */
@@ -117,8 +138,10 @@ export type ExclipConfig = {
   fees: {
     partnerFeeBps: number;
     receiver: string | null;
-    /** What the server pins on every quote and intent: null unless a receiver is set and the rate is above 0. */
+    /** The plain fee the server pins on every quote and intent: null unless a receiver is set and the rate is above 0. */
     partnerFee: { address: string; percentage: number } | null;
+    /** The fee split, or null. A config sets it or a plain fee, never both. */
+    split: FeeSplit | null;
   };
   features: { trading: boolean; embeddedWallet: boolean };
   wallet: { unbackedLimitUsd: number; maxBackupVersions: number; dailyNewPasskeys: number };
@@ -126,6 +149,26 @@ export type ExclipConfig = {
   /** `countryHeader` in lower case; `blockedCountries` sorted, without duplicates and without the baseline, which the
    * server always adds. */
   stocks: { enabled: boolean; countryHeader: string | null; blockedCountries: string[]; termsVersion: string };
+};
+
+/** A fee split (docs/fee-split.md), resolved: the operator's values from the config, the factory's from the fee
+ * allow-list, and the splitter they give. Addresses in EIP-55 mixed case. */
+export type FeeSplit = {
+  factory: string;
+  /** Where the fee on a swap without a tokenised stock goes: the operator's splitter, the address the factory's
+   * predict(operator, operatorRate) returns. */
+  splitter: string;
+  /** The platform's name, address and rate per 100,000, from the factory's entry in the allow-list. */
+  platformName: string;
+  platform: string;
+  platformRate: number;
+  operator: string;
+  operatorRate: number;
+  /** platformRate + operatorRate. The fee is the amount sold × totalRate ÷ 100,000, rounded down (splitFee). */
+  totalRate: number;
+  /** What the server pins on a swap with a tokenised stock on either side, which never goes to the splitter: the
+   * operator's own plain fee, paid to `operator`, or null for none. */
+  stockFee: { address: string; percentage: number } | null;
 };
 
 /** Credentials. Only apps/server receives these. */
@@ -144,7 +187,8 @@ export type ExclipSecrets = {
  * off (an operator's emergency brake that needs no code change). */
 export type Env = Readonly<Record<string, string | undefined>>;
 
-/** ExClip's ceiling on the partner fee: 1 %. The wallet window refuses anything above it. */
+/** ExClip's ceiling on a plain partner fee: 1 %. The wallet window refuses anything above it. In a split it limits the
+ * operator's rate instead (OPERATOR_RATE_MAX, the same 1 %), and the total may reach the factory's cap. */
 export const PARTNER_FEE_MAX_BPS = 100;
 
 /** Local development: web app, wallet window and server on fixed localhost ports. */
@@ -194,7 +238,8 @@ const ATTESTATION_SECRET_MIN = 32;
 const KNOWN_KEYS: Record<string, readonly string[]> = {
   "": ["sodax", "fees", "origins", "brand", "features", "wallet", "server", "stocks"],
   sodax: ["apiKey"],
-  fees: ["partnerFeeBps", "receiver"],
+  fees: ["partnerFeeBps", "receiver", "split"],
+  "fees.split": ["factory", "operator", "operatorRate", "stockFeeBps"],
   origins: ["app", "wallet"],
   brand: ["name", "operator", "logo", "colors", "termsUrl", "privacyUrl"],
   "brand.colors": ["accent", "accentHover", "accentInk"],
@@ -229,8 +274,13 @@ export function sharesRpId(appHost: string, walletHost: string): boolean {
 
 /** Validates the file, applies the environment overrides and fills in defaults. Throws ConfigError listing every
  * problem: a build or a server start with a broken setting stops, rather than running with a fee, an origin or a
- * switch nobody asked for. */
-export function resolveConfig(input: ExclipConfigInput = {}, env: Env = {}): { config: ExclipConfig; secrets: ExclipSecrets } {
+ * switch nobody asked for. `allowList` is the fee allow-list (apps/wallet/fee-receivers.json, which node.ts reads):
+ * a split may use only a factory it lists. */
+export function resolveConfig(
+  input: ExclipConfigInput = {},
+  env: Env = {},
+  allowList: FeeAllowList = EMPTY_FEE_ALLOW_LIST,
+): { config: ExclipConfig; secrets: ExclipSecrets } {
   const problems: string[] = [];
 
   // Unknown keys, at every level the file has.
@@ -339,6 +389,46 @@ export function resolveConfig(input: ExclipConfigInput = {}, env: Env = {}): { c
   }
   if (partnerFeeBps > 0 && receiver === null) problems.push("fees.receiver is required when fees.partnerFeeBps is above 0");
 
+  // A fee split: the operator's values from here, the factory's from the reviewed allow-list. Then the factory's own
+  // refusals (FeeSplitterFactory.sol:83-88): CREATE2 gives an address for any input, and a fee sent where the factory
+  // will never create a splitter is stuck for good.
+  let split: FeeSplit | null = null;
+  if (f.split !== undefined && f.split !== null && !isRecord(f.split)) problems.push("fees.split must be an object, or null");
+  if (isRecord(f.split)) {
+    const { factory, operator, operatorRate } = f.split;
+    if (!isAddress(factory)) problems.push(`fees.split.factory must be ${ADDRESS_RULE}`);
+    if (!isAddress(operator)) problems.push(`fees.split.operator must be ${ADDRESS_RULE}`);
+    if (!isOperatorRate(operatorRate)) problems.push(`fees.split.operatorRate must be a whole number from 0 to ${OPERATOR_RATE_MAX}`);
+    const stockFeeBps = whole(f.split.stockFeeBps, 0, 0, PARTNER_FEE_MAX_BPS, "fees.split.stockFeeBps");
+    if (partnerFeeBps > 0 || receiver !== null) {
+      problems.push("fees.split can't be set with fees.partnerFeeBps or fees.receiver: a config sets a plain fee or a split, never both");
+    }
+    const listed = isAddress(factory) ? allowList.factories.find((x) => sameAddress(x.address, factory)) : undefined;
+    if (isAddress(factory) && !listed) {
+      problems.push(
+        `fees.split.factory ${checksumAddress(factory)} is not listed in apps/wallet/fee-receivers.json: it is added there in a reviewed commit, ` +
+          "with the values read from the chain (docs/fee-split.md)",
+      );
+    }
+    if (listed && isAddress(operator) && isOperatorRate(operatorRate)) {
+      const refusal = splitRefusal(listed, operator, operatorRate);
+      if (refusal) problems.push(`fees.split: ${describeSplitRefusal(refusal, listed, operatorRate)}`);
+      else {
+        split = {
+          factory: listed.address,
+          splitter: predictSplitter(listed, operator, operatorRate),
+          platformName: listed.platformName,
+          platform: listed.platform,
+          platformRate: listed.platformRate,
+          operator: checksumAddress(operator),
+          operatorRate,
+          totalRate: listed.platformRate + operatorRate,
+          stockFee: stockFeeBps > 0 ? { address: checksumAddress(operator), percentage: stockFeeBps } : null,
+        };
+      }
+    }
+  }
+
   const ft = section("features");
   const features = {
     trading: flag(ft.trading, true, "features.trading") && !ON.test(fromEnv("EXCLIP_DISABLE_TRADING") ?? ""),
@@ -420,6 +510,7 @@ export function resolveConfig(input: ExclipConfigInput = {}, env: Env = {}): { c
         partnerFeeBps,
         receiver,
         partnerFee: partnerFeeBps > 0 && receiver ? { address: receiver, percentage: partnerFeeBps } : null,
+        split,
       },
       features,
       wallet: walletLimits,

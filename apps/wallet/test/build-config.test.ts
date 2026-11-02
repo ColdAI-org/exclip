@@ -8,6 +8,7 @@ import type { Plugin } from "vite";
 import {
   DEV_ORIGINS, PLACEHOLDER_ORIGINS, WALLET_CSP, resolveConfig, walletBuildConfig, walletSecurityHeaders, type ExclipConfigInput,
 } from "@exclip/config";
+import { parseFeeAllowList } from "@exclip/config/fee-split";
 import { loadPublicConfig } from "@exclip/config/node";
 import { FEE_RECEIVERS_FILE, assertProductionOrigins, buildWarnings, parseFeeReceivers } from "../build-guards.ts";
 import viteConfig, { brandIcon } from "../vite.config.ts";
@@ -34,10 +35,35 @@ test("fee receivers come from the committed fee-receivers.json, never from the e
   assert.throws(() => parseFeeReceivers("not json"));
 });
 
+test("the build stops on a fee-split factory or split the allow-list can't vouch for", () => {
+  // The local dry run's factory, as a reviewer lists it from the chain (contracts/fee-split/README.md).
+  const [dryRun] = (JSON.parse(read("../../../contracts/fee-split/test/vectors/splitters.json")) as {
+    factories: { address: string; platform: string; platformRate: number; maxTotalRate: number; initCodeHash: string }[];
+  }).factories;
+  assert.ok(dryRun);
+  const factory = { address: dryRun.address, platformName: "Platform", platform: dryRun.platform, platformRate: dryRun.platformRate, maxTotalRate: dryRun.maxTotalRate, initCodeHash: dryRun.initCodeHash };
+  const split = { factory: dryRun.address, operator: "0x" + "22".repeat(20), operatorRate: 100 };
+  const receiver = "0x" + "33".repeat(20);
+  const file = (factories: unknown[], splits: unknown[]) => JSON.stringify({ receivers: [receiver], factories, splits });
+
+  // Listed properly, a split adds nothing to the plain-fee receivers.
+  assert.deepEqual(parseFeeReceivers(file([factory], [split])), [receiver]);
+  for (const [factories, splits, why] of [
+    [[{ ...factory, initCodeHash: "0x" + "00".repeat(32) }], [], /initCodeHash/],
+    [[{ ...factory, platformRate: 1_876 }], [], /factories\[0\]/],
+    [[factory], [{ ...split, factory: "0x" + "44".repeat(20) }], /is not in "factories"/],
+    [[factory], [{ ...split, operator: dryRun.platform }], /\(OperatorIsPlatform\)/],
+    [[factory], [{ ...split, operatorRate: 1_001 }], /operatorRate/],
+    [[factory], [split, split], /listed twice/],
+  ] as const) {
+    assert.throws(() => parseFeeReceivers(file([...factories], [...splits])), (e: unknown) => e instanceof Error && /^fee-receivers\.json: /.test(e.message) && why.test(e.message), why.source);
+  }
+});
+
 test("the repository ships an empty fee allowlist, so the wallet signs only fee-free intents", () => {
-  // A deployment that charges a partner fee adds its receiver to fee-receivers.json in a reviewed commit and updates
-  // this test in the same commit (docs/embedded-wallet.md).
-  assert.deepEqual(parseFeeReceivers(readFileSync(FEE_RECEIVERS_FILE, "utf8")), []);
+  // A deployment that charges a fee adds its receiver, or its fee-split factory and split, to fee-receivers.json in a
+  // reviewed commit and updates this test in the same commit (docs/embedded-wallet.md, docs/fee-split.md).
+  assert.deepEqual(parseFeeAllowList(readFileSync(FEE_RECEIVERS_FILE, "utf8")), { receivers: [], factories: [], splits: [] });
 });
 
 test("production build guard: an app origin that shares the wallet's rpId is refused; distinct hosts pass", () => {

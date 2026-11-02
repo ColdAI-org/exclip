@@ -281,7 +281,7 @@ test("SODAX key 4/4: it is sent upstream in x-api-key, only to SODAX, never in a
 });
 
 test("defaults: no fee in /config, and a client's partnerFee (and hook) is stripped before SODAX sees the quote", async (t) => {
-  assert.deepEqual(resolveConfig().config.fees, { partnerFeeBps: 0, receiver: null, partnerFee: null });
+  assert.deepEqual(resolveConfig().config.fees, { partnerFeeBps: 0, receiver: null, partnerFee: null, split: null });
   const calls: Upstream[] = [];
   // The defaults, plus a key from the environment so the quote can go upstream.
   const s = await serve(t, makeApp({ env: { SODAX_API_KEY: KEY }, fetch: echoingSodax(calls) }));

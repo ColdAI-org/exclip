@@ -14,6 +14,7 @@ import {
   formatRate,
   implementationOf,
   isAddress,
+  parseFeeAllowList,
   predictSplitter,
   splitFee,
   splitRefusal,
@@ -183,4 +184,124 @@ test("rates read as percentages, and an operator's rate is capped at the plain f
   const cases: [number, string][] = [[0, "0"], [1, "0.001"], [10, "0.01"], [100, "0.1"], [875, "0.875"], [1_000, "1"], [1_050, "1.05"], [1_875, "1.875"], [100_000, "100"]];
   for (const [rate, text] of cases) assert.equal(formatRate(rate), text, String(rate));
   assert.equal(OPERATOR_RATE_MAX, (PARTNER_FEE_MAX_BPS * RATE_SCALE) / 10_000);
+});
+
+/* ------------------------------------------------------------------ the fee allow-list */
+
+/** A factory from the vectors as a reviewer lists it in fee-receivers.json. */
+const listed = (f: Vectors["factories"][number], platformName = "Platform") => ({
+  address: f.address, platformName, platform: f.platform, platformRate: f.platformRate, maxTotalRate: f.maxTotalRate, initCodeHash: f.initCodeHash,
+});
+const README_LISTED = listed(vectors.factories[0]!);
+const SPLIT = { factory: README_FACTORY.address, operator: OPERATOR, operatorRate: 100 };
+const parse = (doc: object) => parseFeeAllowList(JSON.stringify({ receivers: [], ...doc }));
+
+test("the allow-list takes every factory in the vectors and every split within the operator's limit, at the factories' splitters", () => {
+  const allowed = vectors.splitters.filter((s) => s.operatorRate <= OPERATOR_RATE_MAX);
+  assert.ok(allowed.length >= 10);
+  const parsed = parse({
+    factories: vectors.factories.map((f, i) => listed(f, `Platform ${i + 1}`)),
+    splits: allowed.map(({ factory, operator, operatorRate }) => ({ factory, operator, operatorRate })),
+  });
+  assert.deepEqual(parsed.factories, vectors.factories.map((f, i) => listed(f, `Platform ${i + 1}`)));
+  assert.deepEqual(parsed.splits, allowed.map(({ factory, operator, operatorRate, splitter }) => ({ factory, operator, operatorRate, splitter })));
+
+  // Lower case in, EIP-55 out, and the same splitter.
+  const lower = parse({
+    factories: [{ ...README_LISTED, address: README_LISTED.address.toLowerCase(), initCodeHash: README_LISTED.initCodeHash.toUpperCase().replace("0X", "0x") }],
+    splits: [{ ...SPLIT, factory: SPLIT.factory.toLowerCase() }],
+  });
+  assert.deepEqual(lower.factories, [README_LISTED]);
+  assert.equal(lower.splits[0]?.splitter, "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe");
+});
+
+test("the allow-list refuses a split its factory would refuse, by the factory's error name", () => {
+  const factories = vectors.factories.map((f) => listed(f));
+  for (const r of vectors.refusals) {
+    const at = `${r.factory} ${r.operator} ${r.operatorRate}`;
+    const message = r.operatorRate > OPERATOR_RATE_MAX ? /operatorRate must be a whole number from 0 to 1000/ : new RegExp(`\\(${r.error}\\)`);
+    assert.throws(() => parse({ factories, splits: [{ factory: r.factory, operator: r.operator, operatorRate: r.operatorRate }] }), message, at);
+  }
+  // Within the factory's cap but above the operator's limit: the vectors' splitter at 1,875 under a platform rate of 0.
+  const high = vectors.splitters.find((s) => s.operatorRate > OPERATOR_RATE_MAX);
+  assert.ok(high);
+  assert.throws(() => parse({ factories, splits: [{ factory: high.factory, operator: high.operator, operatorRate: high.operatorRate }] }), /operatorRate must be/);
+});
+
+test("the allow-list refuses a factory entry with a value no FeeSplitterFactory there has", () => {
+  const other = vectors.factories[1]!;
+  const bad: [object, RegExp][] = [
+    [{ initCodeHash: other.initCodeHash }, /initCodeHash is 0x.*, but a FeeSplitterFactory at 0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519 has 0xd458/],
+    [{ initCodeHash: "0x12" }, /initCodeHash/],
+    [{ initCodeHash: null }, /initCodeHash/],
+    [{ address: other.address }, /initCodeHash/],
+    [{ address: "0x5B73C5498c1E3b4dbA84de0F1833c4a029d90519" }, /address must be 0x and 40 hex digits/],
+    [{ platform: `0x${"0".repeat(40)}` }, /zero address/],
+    [{ platform: "0x1111" }, /platform must be/],
+    [{ platformRate: "875" }, /platformRate must be a whole number/],
+    [{ platformRate: 2_000 }, /platformRate 2000 is above maxTotalRate 1875/],
+    [{ maxTotalRate: 0 }, /maxTotalRate must be a whole number from 1 to 100000/],
+    [{ maxTotalRate: 100_001 }, /maxTotalRate must be/],
+    [{ platformName: "" }, /platformName must be plain text of 1 to 40 characters/],
+    [{ platformName: " Platform" }, /platformName/],
+    [{ platformName: "P".repeat(41) }, /platformName/],
+    [{ platformName: "<b>Platform</b>" }, /platformName/],
+    [{ platformName: "Plat\nform" }, /platformName/],
+    [{ platformName: 7 }, /platformName/],
+    [{ note: "x" }, /factories\[0\]: unknown key "note"/],
+  ];
+  for (const [change, message] of bad) {
+    assert.throws(() => parse({ factories: [{ ...README_LISTED, ...change }] }), message, JSON.stringify(change));
+  }
+  const unnamed: Record<string, unknown> = { ...README_LISTED };
+  delete unnamed.platformName;
+  assert.throws(() => parse({ factories: [unnamed] }), /factories\[0\]: "platformName" is missing/);
+  assert.throws(() => parse({ factories: [README_LISTED, { ...README_LISTED, address: README_LISTED.address.toLowerCase() }] }), /listed twice/);
+  assert.throws(() => parse({ factories: [README_FACTORY.address] }), /factories\[0\] must be an object/);
+  assert.ok(parse({ factories: [{ ...README_LISTED, platformName: "Platform & Co. — Ü" }] }));
+});
+
+test("the allow-list refuses a split entry it can't vouch for", () => {
+  const factories = [README_LISTED];
+  const bad: [object, RegExp][] = [
+    [{ factory: vectors.factories[1]!.address }, /factory 0x7FA9.* is not in "factories"/],
+    [{ factory: "0x5B73C5498c1E3b4dbA84de0F1833c4a029d90519" }, /splits\[0\]: factory must be 0x and 40 hex digits/],
+    [{ operator: "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD" }, /splits\[0\]: operator must be/],
+    [{ operatorRate: 1_001 }, /operatorRate must be a whole number from 0 to 1000/],
+    [{ operatorRate: -1 }, /operatorRate must be/],
+    [{ operatorRate: 0.5 }, /operatorRate must be/],
+    [{ operatorRate: "100" }, /operatorRate must be/],
+    [{ operatorName: "Acme" }, /splits\[0\]: unknown key "operatorName"/],
+  ];
+  for (const [change, message] of bad) {
+    assert.throws(() => parse({ factories, splits: [{ ...SPLIT, ...change }] }), message, JSON.stringify(change));
+  }
+  assert.throws(() => parse({ factories, splits: [{ factory: SPLIT.factory, operator: OPERATOR }] }), /"operatorRate" is missing/);
+  assert.throws(() => parse({ factories, splits: [SPLIT, { ...SPLIT, operator: OPERATOR.toLowerCase() }] }), /splits\[1\]: listed twice/);
+  // A fee to a splitter listed as a plain receiver too would be checked as a plain fee, not at the split's rates.
+  assert.throws(
+    () => parse({ receivers: ["0x92f0b9beff17b0fa1be01ec0b2fbc013554057fe"], factories, splits: [SPLIT] }),
+    /its splitter 0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe is in "receivers" too/,
+  );
+  // The same operator at two rates is two splitters; the operator itself may be a plain receiver (its own fee on stocks).
+  const two = parse({ receivers: [OPERATOR], factories, splits: [SPLIT, { ...SPLIT, operatorRate: 200 }] });
+  assert.equal(new Set(two.splits.map((s) => s.splitter)).size, 2);
+});
+
+test("the allow-list's own shape: receivers as before, factories and splits optional, nothing unknown", () => {
+  const a = `0x${"Ab".repeat(20)}`;
+  assert.deepEqual(parseFeeAllowList(JSON.stringify({ receivers: [a] })), { receivers: [a.toLowerCase()], factories: [], splits: [] });
+  assert.deepEqual(parseFeeAllowList(JSON.stringify({ $comment: "x", receivers: [], factories: [], splits: [] })), { receivers: [], factories: [], splits: [] });
+  const bad: [string, RegExp][] = [
+    ["{}", /"receivers" must be an array/],
+    ['{"receivers": null}', /"receivers" must be an array/],
+    ['{"receivers": [], "factories": null}', /"factories" must be an array/],
+    ['{"receivers": [], "splits": {}}', /"splits" must be an array/],
+    ['{"receivers": [], "receiver": []}', /unknown key "receiver"/],
+    ['{"receivers": ["0x1234"]}', /not an address: 0x1234/],
+    [`{"receivers": ["${a}", "${a.toLowerCase()}"]}`, /duplicate receiver/],
+    ["[]", /the file must be an object/],
+    ["not json", /not JSON/],
+  ];
+  for (const [json, message] of bad) assert.throws(() => parseFeeAllowList(json), (e: Error) => e.message.startsWith("fee-receivers.json: ") && message.test(e.message), json);
 });

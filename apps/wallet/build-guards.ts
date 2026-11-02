@@ -3,20 +3,17 @@
  * its own origin, and the partner-fee receivers an intent may name (docs/embedded-wallet.md). */
 import { fileURLToPath } from "node:url";
 import { PLACEHOLDER_ORIGINS, parseOrigin, sharesRpId, usesPlaceholderOrigins, type ExclipConfig } from "@exclip/config";
+import { parseFeeAllowList } from "@exclip/config/fee-split";
 
-/** The partner-fee receivers an intent may name: `fee-receivers.json`, committed with the code rather than taken from
- * the environment, so changing it takes a reviewed commit. Must contain exclip.config.ts fees.receiver when a partner
- * fee is set; empty → the wallet refuses any fee. */
+/** The fee allow-list: `fee-receivers.json`, committed with the code rather than taken from the environment, so
+ * changing it takes a reviewed commit. Its receivers must contain exclip.config.ts fees.receiver when a partner fee is
+ * set; empty → the wallet refuses any fee. The config check reads the same file for the factories a split may use. */
 export const FEE_RECEIVERS_FILE = fileURLToPath(new URL("./fee-receivers.json", import.meta.url));
 
+/** The plain-fee receivers an intent may name, in lower case. The whole file is checked (parseFeeAllowList), so the
+ * build stops on a factory or split entry that is malformed, or that its factory would refuse. */
 export function parseFeeReceivers(json: string): string[] {
-  const doc = JSON.parse(json) as { receivers?: unknown };
-  const list = doc?.receivers;
-  if (!Array.isArray(list)) throw new Error("fee-receivers.json: \"receivers\" must be an array");
-  for (const a of list) if (typeof a !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(a)) throw new Error(`fee-receivers.json: not an address: ${String(a)}`);
-  const lower = (list as string[]).map((a) => a.toLowerCase());
-  if (new Set(lower).size !== lower.length) throw new Error("fee-receivers.json: duplicate receiver");
-  return lower;
+  return [...parseFeeAllowList(json).receivers];
 }
 
 /** A production build answers exactly the origins it bakes in. Each must be an exact https origin (no http, path,
