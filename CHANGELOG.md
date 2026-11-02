@@ -85,6 +85,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   used by the app, the server or the wallet yet. `docs/fee-split.md`
   explains how SODAX pays a partner fee, how the split works, and how
   ExClip would use it.
+- A second CI job, `contracts: forge, slither`, for `contracts/fee-split`:
+  formatting, build and tests, the vectors and the splitter code checked
+  against the compiled contracts, and Slither, which fails on any finding.
+  It runs on pushes to `main` and on pull requests that change the
+  contracts, and shows as skipped on any other pull request.
 
 ### Changed
 

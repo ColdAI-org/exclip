@@ -126,7 +126,8 @@ pnpm run slither             # Slither 0.11.6
 ```
 
 There are no git submodules and no forge-std. The cheatcodes the tests use are declared in `test/utils/Test.sol`.
-CI doesn't run these tests yet.
+CI runs these in the `contracts: forge, slither` job of [`ci.yml`](../../.github/workflows/ci.yml), with the
+formatting check, the build, Slither and the checks of the vectors and the splitter code below.
 
 All 57 tests pass:
 
@@ -147,9 +148,9 @@ Coverage of `src/` is 100 %: lines 92/92, statements 111/111, branches 21/21, fu
 
 ## Static analysis
 
-`pnpm run slither` finds nothing. Before the comments that answer them were added, it found 13 results from 9
-detectors. None is a defect. Each is now silenced by a `slither-disable` comment, under a comment that gives the
-reason:
+`pnpm run slither` finds nothing, and with `--fail-pedantic` it fails on any finding, in CI too. Before the comments
+that answer them were added, it found 13 results from 9 detectors. None is a defect. Each is now silenced by a
+`slither-disable` comment, under a comment that gives the reason:
 
 | Detector | Where | Why it isn't a problem |
 |---|---|---|
@@ -204,9 +205,10 @@ pnpm run vectors            # another: rewrites test/vectors/splitters.json
 ```
 
 The first factory is the dry run's, so the file holds the values above: the script stops unless that factory lands
-at the dry run's address, as it does on a fresh anvil. After a change to the contracts, run it and commit the file. From the repository root, `pnpm run splitter-code` checks
-the splitter's creation code in the TypeScript against `forge inspect FeeSplitterFactory deployedBytecode`, and
-`pnpm test` checks the TypeScript against the file.
+at the dry run's address, as it does on a fresh anvil. After a change to the contracts, run it and commit the file.
+CI runs it too, and fails if the file it writes differs from the committed one. From the repository root,
+`pnpm run splitter-code` checks the splitter's creation code in the TypeScript against
+`forge inspect FeeSplitterFactory deployedBytecode`, and `pnpm test` checks the TypeScript against the file.
 
 ## Deploy to Sonic
 

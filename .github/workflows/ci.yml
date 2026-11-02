@@ -47,3 +47,95 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
         run: pnpm build
+
+  # Whether a pull request changes anything the contracts job checks. When it doesn't, that job's `if` skips it, and a
+  # skipped job still shows in the pull request's checks. A `paths` filter on the workflow would leave it out instead.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      contracts: ${{ steps.contracts.outputs.changed }}
+    steps:
+      # Two levels: a pull request's checkout is its merge commit, whose first parent is the base branch.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Contracts changed
+        id: contracts
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          # A push to main or a manual run always checks the contracts, and so does a pull request git can't tell about.
+          if [ "$EVENT" != pull_request ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! files=$(git diff --name-only HEAD^1 HEAD -- contracts/fee-split packages/config/src/fee-split.ts packages/config/scripts/check-splitter-code.ts .github/workflows/ci.yml); then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "${files:-Nothing the contracts job checks has changed.}"
+          if [ -n "$files" ]; then echo "changed=true"; else echo "changed=false"; fi >> "$GITHUB_OUTPUT"
+
+  contracts:
+    name: "contracts: forge, slither"
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # The Foundry the contracts were built and tested with.
+      - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+        with:
+          version: v1.5.1
+      - name: Format
+        working-directory: contracts/fee-split
+        run: forge fmt --check
+      - name: Build
+        working-directory: contracts/fee-split
+        run: forge build
+      - name: Test
+        working-directory: contracts/fee-split
+        run: forge test
+      # test/vectors/splitters.json, which packages/config's tests check splitter addresses against, must be what these
+      # contracts work out. The script runs on a fresh anvil and sends nothing.
+      - name: Vectors
+        working-directory: contracts/fee-split
+        run: |
+          anvil --silent --hardfork paris &
+          anvil=$!
+          for _ in $(seq 50); do cast chain-id --rpc-url http://127.0.0.1:8545 > /dev/null 2>&1 && break; sleep 0.2; done
+          forge script script/Vectors.s.sol:Vectors --rpc-url http://127.0.0.1:8545
+          kill "$anvil"
+          if ! git diff --exit-code -- test/vectors/splitters.json; then
+            echo "::error::test/vectors/splitters.json is not what the contracts work out. Run pnpm run vectors (contracts/fee-split/README.md) and commit the file."
+            exit 1
+          fi
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # The splitter's creation code in packages/config/src/fee-split.ts must be the compiled factory's: the job fails if
+      # they drift apart.
+      - name: Splitter code
+        run: pnpm run splitter-code
+      # From pip, not crytic/slither-action, so Slither compiles with the Foundry pinned above, by the same command as
+      # `pnpm run slither`. It runs `forge clean` first, so it goes last. --fail-pedantic: any finding fails the job.
+      - name: Slither
+        working-directory: contracts/fee-split
+        run: |
+          python3 -m venv "$RUNNER_TEMP/slither"
+          "$RUNNER_TEMP/slither/bin/pip" install slither-analyzer==0.11.6
+          "$RUNNER_TEMP/slither/bin/slither" . --fail-pedantic

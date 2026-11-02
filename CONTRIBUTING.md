@@ -32,6 +32,23 @@ pnpm test
 pnpm build
 ```
 
+A change to the fee-split contracts in `contracts/fee-split`, to the
+splitter code in `packages/config/src/fee-split.ts` or to the workflow
+also runs the contracts' job. With Foundry v1.5.1 and Slither 0.11.6
+installed, run in `contracts/fee-split`:
+
+```sh
+pnpm run forge:fmt:check
+pnpm run forge:build
+pnpm run forge:test
+pnpm run slither
+```
+
+Then run `pnpm run splitter-code` from the root. After a change to the
+contracts, regenerate the vectors on a fresh anvil and commit them
+([the vectors](contracts/fee-split/README.md#the-vectors-exclip-is-tested-against)):
+CI regenerates them too, and fails if they differ.
+
 Add or update tests with your change, and add a line under
 `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) if users or operators will
 notice it.

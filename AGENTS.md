@@ -62,7 +62,9 @@ the repository root.
 - **`pnpm dev`** reads the config only when it starts, so restart it after
   a change. It always uses the localhost origins.
 - CI runs install, typecheck, lint, docs:links, test and build. Run the same
-  before you call a change done.
+  before you call a change done. A change to `contracts/fee-split` also
+  runs the contracts' job. Its checks need Foundry and Slither to run
+  locally ([CONTRIBUTING](CONTRIBUTING.md#before-you-open-a-pull-request)).
 
 ## Conventions
 

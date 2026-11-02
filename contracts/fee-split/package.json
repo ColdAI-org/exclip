@@ -11,7 +11,7 @@
     "forge:fmt:check": "forge fmt --check",
     "forge:snapshot": "forge snapshot",
     "forge:inspect": "forge inspect",
-    "slither": "slither .",
+    "slither": "slither . --fail-pedantic",
     "anvil": "anvil --silent --hardfork paris",
     "dry-run": "forge script script/Deploy.s.sol:Deploy --rpc-url http://127.0.0.1:8545",
     "dry-run:example": "PLATFORM_RECEIVER=0x1111111111111111111111111111111111111111 SAMPLE_OPERATOR=0x2222222222222222222222222222222222222222 pnpm run dry-run",

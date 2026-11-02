@@ -76,6 +76,7 @@ From the repository root:
 | `pnpm run screenshots` | Takes the documentation's screenshots against a stand-in for SODAX ([screenshots](#screenshots)). With `--brand`, under your own brand |
 | `pnpm run contrast` | Checks `brand.colors` in your config against [the contrast rule](branding.md#the-contrast-rule) |
 | `pnpm run docs:links` | Checks every relative link, anchor and image in the Markdown files |
+| `pnpm run splitter-code` | Checks the fee splitter's creation code in `packages/config/src/fee-split.ts` against the compiled factory. Needs Foundry ([the vectors](../contracts/fee-split/README.md#the-vectors-exclip-is-tested-against)) |
 
 For one package:
 
@@ -90,6 +91,21 @@ For one package:
 
 CI runs `pnpm install --frozen-lockfile`, then typecheck, lint, the link
 check, test and build, on every push to `main` and every pull request.
+
+A second job, `contracts: forge, slither`, checks the fee-split contracts in
+`contracts/fee-split` with Foundry v1.5.1:
+
+- `forge fmt --check`, `forge build` and `forge test`;
+- the vectors, regenerated on a fresh anvil: the job fails unless they
+  match the committed file;
+- `pnpm run splitter-code`;
+- Slither 0.11.6, which fails the job on any finding.
+
+It runs on every push to `main` and every manual run. On a pull request it
+runs when the pull request changes `contracts/fee-split/`,
+`packages/config/src/fee-split.ts`, the script behind
+`pnpm run splitter-code` or the workflow. On any other pull request it
+shows as skipped.
 
 ## Tests
 
