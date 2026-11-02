@@ -1,6 +1,6 @@
 /** Starts the ExClip server: `node src/index.ts` (production) or `node src/index.ts --dev`. Reads exclip.config.ts
  * at the repository root, opens storage and listens on server.port. */
-import { ConfigError, usesPlaceholderOrigins, type FeeSplit } from "@exclip/config";
+import { ConfigError, usesPlaceholderOrigins, type FeeSplit, type RateFee } from "@exclip/config";
 import { formatRate } from "@exclip/config/fee-split";
 import { findRepoRoot, loadExclipConfig, type LoadedConfig } from "@exclip/config/node";
 import { createApp } from "./app.ts";
@@ -32,13 +32,17 @@ const where = { redis: "Redis", postgres: "Postgres", memory: "memory (this proc
 const splitNote = (s: FeeSplit) => `fee split ${formatRate(s.totalRate)} % to splitter ${s.splitter} (${s.platformName} `
   + `${formatRate(s.platformRate)} %, operator ${formatRate(s.operatorRate)} %); on stock swaps `
   + (s.stockFee ? `${s.stockFee.percentage} bps to the operator` : "no fee");
+const rateNote = (r: RateFee, name: string) => `partner fee ${formatRate(r.rate)} % to ${r.address} (${name}); on stock swaps `
+  + (r.stockFee ? `${r.stockFee.percentage} bps` : "no fee");
+const feeNote = config.fees.split ? splitNote(config.fees.split)
+  : config.fees.rateFee ? rateNote(config.fees.rateFee, config.fees.receiverName)
+  : `partner fee ${config.fees.partnerFee ? `${config.fees.partnerFee.percentage} bps` : "none"}`;
 const notes = [
   `${dev ? "development" : "production"} on port ${config.server.port}; configuration from ${file ?? "defaults (no exclip.config.ts)"}`,
   `storage: rate limits and challenges in ${where[plan.kv]}`
     + (config.features.embeddedWallet ? `; passkey wallet backups in ${where[plan.wallet]}` : "; passkey wallet off"),
   secrets.sodaxApiKey ? "SODAX API key: set" : "SODAX API key: not set (quotes and trading answer 503 until it is)",
-  `trading ${config.features.trading ? "on" : "off"}; `
-    + (config.fees.split ? splitNote(config.fees.split) : `partner fee ${config.fees.partnerFee ? `${config.fees.partnerFee.percentage} bps` : "none"}`),
+  `trading ${config.features.trading ? "on" : "off"}; ${feeNote}`,
   config.stocks.enabled
     ? `tokenised stocks: on; country from ${config.stocks.countryHeader} with the edge secret; terms version ${config.stocks.termsVersion}`
     : "tokenised stocks: off",

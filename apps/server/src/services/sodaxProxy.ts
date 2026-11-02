@@ -21,8 +21,8 @@ export type SodaxRoute = {
   /** Builds an unsigned transaction: refused while features.trading is off. Status, submit and cancel never are, so
    * an intent that was already signed can always be followed or recovered. */
   builds?: boolean;
-  /** Where the token legs are, for the tokenised-stock refusal, and the amount sold, for a fee split: tokenSrc, tokenDst
-   * and amount on a quote; inputToken, outputToken and inputAmount on an intent. */
+  /** Where the token legs are, for the tokenised-stock refusal, and the amount sold, for a fee rate or a split: tokenSrc,
+   * tokenDst and amount on a quote; inputToken, outputToken and inputAmount on an intent. */
   legs?: "quote" | "intent";
   /** Safe to retry on a 5xx (429 is always retried: a rate-limited request was not processed). */
   idempotent?: boolean;
@@ -105,18 +105,20 @@ type PinnedFee = PartnerFee | { address: string; amount: string };
 /** An amount in smallest units as a decimal string: no sign, point or leading zero, and at most 78 digits, a uint256's. */
 const UNITS = /^(?:0|[1-9][0-9]{0,77})$/;
 
-/** The fee pinned on a fee route. A plain fee is pinned as configured, on every swap. A split (docs/fee-split.md) pins
- * the amount sold × the total rate ÷ 100,000, rounded down, to the splitter, with no percentage, and nothing when that
- * rounds to 0. On a swap with a tokenised stock on either side it pins the operator's own fee, or none: never the
- * splitter. "BAD_AMOUNT": a split's request without an amount sold to work the fee out from. */
+/** The fee pinned on a fee route. A plain fee in basis points is pinned as configured, on every swap. A fee rate
+ * (docs/fees.md) or a split (docs/fee-split.md) pins the amount sold × its rate ÷ 100,000, rounded down, to the
+ * receiver or the splitter, with no percentage, and nothing when that rounds to 0. On a swap with a tokenised stock on
+ * either side, each pins its own fee on stock swaps, or none: never the splitter. "BAD_AMOUNT": such a request without
+ * an amount sold to work the fee out from. */
 function feeFor(config: ServerConfig, route: SodaxRoute, body: Record<string, unknown>, stockLeg: boolean): PinnedFee | null | "BAD_AMOUNT" {
   const split = config.feeSplit;
-  if (!split) return config.partnerFee;
-  if (stockLeg) return split.stockFee;
+  const rated = split ? { address: split.splitter, rate: split.totalRate, stockFee: split.stockFee } : config.rateFee;
+  if (!rated) return config.partnerFee;
+  if (stockLeg) return rated.stockFee;
   const sold = body[route.legs === "quote" ? "amount" : "inputAmount"];
   if (typeof sold !== "string" || !UNITS.test(sold)) return "BAD_AMOUNT";
-  const amount = splitFee(BigInt(sold), split.totalRate);
-  return amount > 0n ? { address: split.splitter, amount: amount.toString() } : null;
+  const amount = splitFee(BigInt(sold), rated.rate);
+  return amount > 0n ? { address: rated.address, amount: amount.toString() } : null;
 }
 
 function pinFee(body: Record<string, unknown>, partnerFee: PinnedFee | null): Record<string, unknown> {
@@ -227,7 +229,7 @@ export function createSodaxProxy(options: SodaxProxyOptions) {
       }
     }
 
-    // After the stock check: a split's fee depends on whether either leg is a stock.
+    // After the stock check: a fee rate's or a split's fee depends on whether either leg is a stock.
     let outBody: unknown = body;
     if (route.fee) {
       const fee = feeFor(config, route, body as Record<string, unknown>, stockLeg);

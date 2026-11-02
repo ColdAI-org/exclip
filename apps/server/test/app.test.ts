@@ -151,7 +151,7 @@ test("createApp with memory stores answers /api/exclip/config: the defaults, no 
   const r = await s.get("/api/exclip/config");
   assert.equal(r.status, 200);
   assert.deepEqual(bodyOf(r), {
-    tradingEnabled: true, sodaxConfigured: false, partnerFeeBps: 0, feeReceiver: null, feeSplit: null,
+    tradingEnabled: true, sodaxConfigured: false, partnerFeeBps: 0, feeReceiver: null, feeRate: null, feeReceiverName: null, feeSplit: null,
     embeddedWallet: true, walletOrigin: WALLET_ORIGIN, unbackedLimitUsd: 100, stocksEnabled: false, stocksTermsVersion: null,
   });
   assert.equal(r.headers["cache-control"], "public, max-age=30");
@@ -290,6 +290,7 @@ test("defaults: no fee in /config, and a client's partnerFee (and hook) is strip
   const config = bodyOf(await s.get("/api/exclip/config"));
   assert.equal(config.partnerFeeBps, 0);
   assert.equal(config.feeReceiver, null);
+  assert.equal(config.feeRate, null);
   const quote = await s.post("/api/exclip/sodax/swaps/quote", { ...QUOTE, partnerFee: { address: ATTACKER, percentage: 100 }, hook: { address: ATTACKER } });
   assert.equal(quote.status, 200);
   const sent = calls.find((c) => c.url === `${SODAX_DEFAULT_BASE}/swaps/quote`);

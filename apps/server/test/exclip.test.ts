@@ -1,6 +1,6 @@
-/** /api/exclip: SODAX key proxy (allow-list, key handling, fee pinning and the fee split, caches, 429 backoff, the trading switch and
- * the tokenised-stock checks), the stock eligibility routes and the markets empty state. Upstream fetch is stubbed;
- * the key and the secrets are fake. */
+/** /api/exclip: SODAX key proxy (allow-list, key handling, fee pinning, the fee rate and the fee split, caches, 429
+ * backoff, the trading switch and the tokenised-stock checks), the stock eligibility routes and the markets empty
+ * state. Upstream fetch is stubbed; the key and the secrets are fake. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -8,7 +8,7 @@ import path from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import {
-  ConfigError, PARTNER_FEE_MAX_BPS, STOCK_REFUSALS, STOCK_STATEMENTS, STOCKS_ATTESTATION_HEADER, STOCKS_BASELINE_COUNTRIES,
+  ConfigError, FEE_RATE_MAX, PARTNER_FEE_MAX_BPS, STOCK_REFUSALS, STOCK_STATEMENTS, STOCKS_ATTESTATION_HEADER, STOCKS_BASELINE_COUNTRIES,
   resolveConfig, type Env, type ExclipConfigInput,
 } from "@exclip/config";
 import { parseFeeAllowList, type FeeAllowList } from "@exclip/config/fee-split";
@@ -170,8 +170,8 @@ test("/config exposes flags and the fee rate, never the key", async (t) => {
   const s = await serve(); t.after(s.close);
   const res = await s.get("/config");
   assert.equal(res.headers.get("cache-control"), "public, max-age=30");
-  assert.deepEqual(await res.json(), { tradingEnabled: false, sodaxConfigured: true, partnerFeeBps: 30, feeReceiver: RECEIVER, feeSplit: null,
-    embeddedWallet: false, walletOrigin: null, unbackedLimitUsd: 100, stocksEnabled: false, stocksTermsVersion: null });
+  assert.deepEqual(await res.json(), { tradingEnabled: false, sodaxConfigured: true, partnerFeeBps: 30, feeReceiver: RECEIVER, feeRate: null,
+    feeReceiverName: "ExClip", feeSplit: null, embeddedWallet: false, walletOrigin: null, unbackedLimitUsd: 100, stocksEnabled: false, stocksTermsVersion: null });
 });
 
 // ---- partner fee ------------------------------------------------------------------------------------------
@@ -197,8 +197,9 @@ test("with no fee configured the field is omitted, even when the client sends on
 test("without a fee: with trading on, quote → build → submit → status reach SODAX without a partner fee", async (t) => {
   const s = await serve({ input: { fees: {}, features: { trading: true, embeddedWallet: false } } });
   t.after(s.close);
-  const config = await json<{ tradingEnabled: boolean; partnerFeeBps: number; feeReceiver: string | null }>(await s.get("/config"));
-  assert.deepEqual([config.tradingEnabled, config.partnerFeeBps, config.feeReceiver], [true, 0, null]);
+  const config = await json<Record<string, unknown>>(await s.get("/config"));
+  assert.deepEqual([config.tradingEnabled, config.partnerFeeBps, config.feeReceiver, config.feeRate, config.feeReceiverName, config.feeSplit],
+    [true, 0, null, null, null, null]);
   // The intent the passkey wallet signs: no fee, no hook, empty data.
   const own = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94";
   const intent = { srcChainKey: "hedera", inputToken: QUOTE_HBAR_BASE.tokenSrc, dstChainKey: "0x2105.base", outputToken: QUOTE_HBAR_BASE.tokenDst,
@@ -287,7 +288,8 @@ test("a split refuses a fee route whose amount sold it can't read (400 BAD_AMOUN
 test("/config publishes the split: the splitter, each party's name and rate per 100,000, and the fee on stock swaps", async (t) => {
   const s = await serve({ input: SPLIT, allowList: ALLOW_LIST }); t.after(s.close);
   const config = await json<Record<string, unknown>>(await s.get("/config"));
-  assert.deepEqual([config.partnerFeeBps, config.feeReceiver], [0, null], "the plain fee's fields stay, empty");
+  assert.deepEqual([config.partnerFeeBps, config.feeReceiver, config.feeRate, config.feeReceiverName], [0, null, null, null],
+    "the plain fee's fields stay, empty");
   // Without brand.operator, the operator is named by brand.name, as in the wallet window.
   assert.deepEqual(config.feeSplit, { receiver: SPLITTER, totalRate: 975, platform: { name: "Example Platform", rate: 875 },
     operator: { name: "ExClip", rate: 100 }, stockFee: null });
@@ -297,6 +299,97 @@ test("/config publishes the split: the splitter, each party's name and rate per 
   t.after(own.close);
   assert.deepEqual((await json<Record<string, unknown>>(await own.get("/config"))).feeSplit, { receiver: SPLITTER, totalRate: 975,
     platform: { name: "Example Platform", rate: 875 }, operator: { name: "Example Operator Ltd", rate: 100 }, stockFee: { receiver: OPERATOR, bps: 25 } });
+});
+
+// ---- fee rate ---------------------------------------------------------------------------------------------
+
+/** A plain fee of 875 per 100,000 (0.875 %) to RECEIVER, with trading on so the fee routes that build transactions
+ * answer. */
+const RATE: ExclipConfigInput = { fees: { rate: 875, receiver: RECEIVER }, features: { trading: true, embeddedWallet: false } };
+
+test("a fee rate without a receiver, out of range or beside partnerFeeBps stops the server at start", () => {
+  assert.throws(() => resolveConfig({ fees: { rate: 875 } }), ConfigError);
+  assert.throws(() => resolveConfig({ fees: { rate: FEE_RATE_MAX + 1, receiver: RECEIVER } }), ConfigError);
+  assert.throws(() => resolveConfig({ fees: { rate: 87.5, receiver: RECEIVER } }), ConfigError);
+  assert.throws(() => resolveConfig({ fees: { partnerFeeBps: 30, rate: 875, receiver: RECEIVER } }), ConfigError);
+  assert.throws(() => resolveConfig({ fees: { rate: 875, stockFeeBps: PARTNER_FEE_MAX_BPS + 1, receiver: RECEIVER } }), ConfigError);
+  const { config, secrets } = resolveConfig({ fees: { rate: 875, stockFeeBps: 25, receiver: RECEIVER } });
+  const server = serverConfig(config, secrets, false);
+  assert.deepEqual([server.partnerFee, server.rateFee, server.feeSplit],
+    [null, { address: RECEIVER, rate: 875, stockFee: { address: RECEIVER, percentage: 25 } }, null]);
+});
+
+test("a fee rate pins an amount to the receiver on the quote and the four intent routes, from the amount sold, rounded down", async (t) => {
+  const s = await serve({ input: RATE }); t.after(s.close);
+  const client = { partnerFee: { address: ELSEWHERE, percentage: 100 }, hook: { kind: "deposit", to: ELSEWHERE } };
+  // 50,000,000,000 sold × 875 ÷ 100,000 = 437,500,000, with no percentage alongside.
+  assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, ...client })).status, 200);
+  assert.deepEqual(sentTo(s, "swaps/quote"), { ...QUOTE_HBAR_BASE, partnerFee: { address: RECEIVER, amount: "437500000" } });
+  // 1,234,567 × 875 ÷ 100,000 = 10,802.46, so 10,802.
+  for (const p of ["swaps/allowance/check", "swaps/approve", "swaps/intents", "swaps/limit-orders"]) {
+    assert.equal((await s.post(`/sodax/${p}`, { ...CRYPTO_INTENT, ...client })).status, 200, p);
+    assert.deepEqual(sentTo(s, p), { ...CRYPTO_INTENT, partnerFee: { address: RECEIVER, amount: "10802" } }, p);
+  }
+  // A route that carries no fee gets none.
+  assert.equal((await s.post("/sodax/swaps/intents/status", { txHash: "0xabc" })).status, 200);
+  assert.deepEqual(sentTo(s, "swaps/intents/status"), { txHash: "0xabc" });
+});
+
+test("a fee rate pins nothing while the fee rounds down to 0, and 1 unit from the first amount that reaches it", async (t) => {
+  const s = await serve({ input: RATE }); t.after(s.close);
+  // 114 × 875 = 99,750, under 100,000; 115 × 875 = 100,625.
+  for (const amount of ["0", "1", "114"]) {
+    assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount, partnerFee: { address: ELSEWHERE, amount: "5" } })).status, 200);
+    assert.equal("partnerFee" in sentTo(s, "swaps/quote"), false, amount);
+  }
+  await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount: "115" });
+  assert.deepEqual(sentTo(s, "swaps/quote").partnerFee, { address: RECEIVER, amount: "1" });
+  // At the lowest rate, 1 per 100,000, the fee reaches 1 unit at 100,000 units sold.
+  const lowest = await serve({ input: { ...RATE, fees: { rate: 1, receiver: RECEIVER } } }); t.after(lowest.close);
+  for (const [inputAmount, fee] of [["99999", undefined], ["100000", { address: RECEIVER, amount: "1" }]] as const) {
+    assert.equal((await lowest.post("/sodax/swaps/intents", { ...CRYPTO_INTENT, inputAmount })).status, 200, inputAmount);
+    assert.deepEqual(sentTo(lowest, "swaps/intents").partnerFee, fee, inputAmount);
+  }
+});
+
+test("a fee rate refuses a fee route whose amount sold it can't read (400 BAD_AMOUNT) before SODAX sees it", async (t) => {
+  const s = await serve({ input: RATE }); t.after(s.close);
+  for (const value of [undefined, null, 50000000, ["1"], "", "-1", "+1", "1.5", "01", "1e6", " 1", "1 ", "0x10", "١", "1".repeat(79)]) {
+    const label = value === undefined ? "missing" : JSON.stringify(value);
+    const quote = await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount: value });
+    assert.equal(quote.status, 400, `quote, ${label}`);
+    assert.deepEqual(await quote.json(), { error: { code: "BAD_AMOUNT",
+      message: "Expected amount as a whole number of the token's smallest units, written in digits." } }, label);
+    for (const p of ["swaps/allowance/check", "swaps/approve", "swaps/intents", "swaps/limit-orders"]) {
+      const intent = await s.post(`/sodax/${p}`, { ...CRYPTO_INTENT, inputAmount: value });
+      assert.equal(intent.status, 400, `${p}, ${label}`);
+      assert.deepEqual(await intent.json(), { error: { code: "BAD_AMOUNT",
+        message: "Expected inputAmount as a whole number of the token's smallest units, written in digits." } }, `${p}, ${label}`);
+    }
+  }
+  assert.equal(s.calls.filter((c) => !c.url.endsWith("/swaps/tokens")).length, 0, "only the token list was read");
+  // 78 digits, as many as a uint256 has, are read: (10⁷⁸ − 1) × 875 ÷ 100,000, rounded down, is 875 × 10⁷³ − 1.
+  assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount: "9".repeat(78) })).status, 200);
+  assert.deepEqual(sentTo(s, "swaps/quote").partnerFee, { address: RECEIVER, amount: `874${"9".repeat(73)}` });
+});
+
+test("/config publishes a fee rate: the receiver and its name, the rate per 100,000 and the fee on stock swaps", async (t) => {
+  const s = await serve({ input: RATE }); t.after(s.close);
+  const config = await json<Record<string, unknown>>(await s.get("/config"));
+  // partnerFeeBps stays 0, and feeReceiver names the receiver as it does for a fee in basis points.
+  assert.deepEqual([config.partnerFeeBps, config.feeReceiver, config.feeRate, config.feeReceiverName, config.feeSplit],
+    [0, RECEIVER, { rate: 875, stockFeeBps: 0 }, "ExClip", null]);
+
+  const own = await serve({ input: { ...RATE, brand: { name: "Swapper" },
+    fees: { rate: 875, stockFeeBps: 25, receiver: RECEIVER, receiverName: "Example Ltd" } } });
+  t.after(own.close);
+  const named = await json<Record<string, unknown>>(await own.get("/config"));
+  assert.deepEqual([named.feeReceiver, named.feeRate, named.feeReceiverName], [RECEIVER, { rate: 875, stockFeeBps: 25 }, "Example Ltd"]);
+
+  // A fee in basis points has the receiver's name too, and no rate.
+  const bps = await serve({ input: { fees: { partnerFeeBps: 30, receiver: RECEIVER, receiverName: "Example Ltd" } } }); t.after(bps.close);
+  const plain = await json<Record<string, unknown>>(await bps.get("/config"));
+  assert.deepEqual([plain.partnerFeeBps, plain.feeReceiver, plain.feeRate, plain.feeReceiverName], [30, RECEIVER, null, "Example Ltd"]);
 });
 
 // ---- caches -----------------------------------------------------------------------------------------------
@@ -667,6 +760,32 @@ test("stocks on with a split: a stock on either side never pays the splitter, on
     // A crypto swap on the same server pays the split.
     assert.equal((await s.post("/sodax/swaps/quote", QUOTE_HBAR_BASE, headers)).status, 200, label);
     assert.deepEqual(sentTo(s, "swaps/quote").partnerFee, { address: SPLITTER, amount: "487500000" }, label);
+  }
+});
+
+test("stocks on with a fee rate: a stock on either side pays only the fee on stock swaps, or none, never the rate", async (t) => {
+  const own = await stocksOn({ input: { ...RATE, fees: { rate: 875, stockFeeBps: 25, receiver: RECEIVER } } }); t.after(own.close);
+  const none = await stocksOn({ input: RATE }); t.after(none.close);
+  const buys = { srcChainKey: "hedera", inputToken: HEDERA_USDC, dstChainKey: "hedera", outputToken: HEDERA_AAPL,
+    inputAmount: "50000000", minOutputAmount: "1", deadline: "1800000300", allowPartialFill: false };
+  const sells = { ...buys, inputToken: HEDERA_AAPL, outputToken: HEDERA_USDC };
+  // A client that asks for the rate's amount on a stock swap is overruled like any other.
+  const client = { partnerFee: { address: RECEIVER, amount: "437500" } };
+  for (const [s, fee] of [[own, { address: RECEIVER, percentage: 25 }], [none, null]] as const) {
+    const label = fee ? "the fee on stock swaps" : "no fee";
+    const headers = via("DE", { [ATT]: await attestationFrom(s, "DE") });
+    assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_USDC_NVDA, ...client }, headers)).status, 200, label);
+    for (const body of [buys, sells]) assert.equal((await s.post("/sodax/swaps/intents", { ...body, ...client }, headers)).status, 200, label);
+    const stockSwaps = s.calls.filter((c) => c.method === "POST");
+    assert.equal(stockSwaps.length, 3, label);
+    for (const c of stockSwaps) {
+      const body = c.body as Record<string, unknown>;
+      assert.deepEqual(body.partnerFee, fee ?? undefined, `${label}: ${c.url}`);
+      assert.equal("partnerFee" in body, fee !== null, `${label}: ${c.url}`);
+    }
+    // A crypto swap on the same server pays the rate: 50,000,000,000 × 875 ÷ 100,000.
+    assert.equal((await s.post("/sodax/swaps/quote", QUOTE_HBAR_BASE, headers)).status, 200, label);
+    assert.deepEqual(sentTo(s, "swaps/quote").partnerFee, { address: RECEIVER, amount: "437500000" }, label);
   }
 });
 

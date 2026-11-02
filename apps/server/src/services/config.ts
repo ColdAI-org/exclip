@@ -1,6 +1,6 @@
 /** What the server takes from exclip.config.ts, flattened once at start: the switches, the wallet limits, the origin
  * in force and the credentials. Values are never logged; only `publicConfig` reaches a browser. */
-import { STOCKS_BASELINE_COUNTRIES, originsFor, type ExclipConfig, type ExclipSecrets } from "@exclip/config";
+import { STOCKS_BASELINE_COUNTRIES, originsFor, type ExclipConfig, type ExclipSecrets, type RateFee } from "@exclip/config";
 
 export const SODAX_DEFAULT_BASE = "https://api.sodax.com/v1";
 export const COINGECKO_PUBLIC_BASE = "https://api.coingecko.com/api/v3";
@@ -46,10 +46,14 @@ export type ServerConfig = {
   /** Server-side only. Never serialised to a client, a log line or an error. */
   sodaxApiKey: string | null;
   sodaxBase: string;
-  /** What is pinned on every quote and intent: null unless a receiver is set and the rate is above 0. */
+  /** What is pinned on every quote and intent: null unless a receiver is set and partnerFeeBps is above 0. */
   partnerFee: PartnerFee | null;
+  /** fees.rate: an amount to the receiver is pinned instead, worked out from each request (services/sodaxProxy.ts). */
+  rateFee: RateFee | null;
+  /** Who the review names as getting a plain fee: fees.receiverName, or brand.name. */
+  feeReceiverName: string;
   /** fees.split: an amount to the splitter is pinned instead, worked out from each request (services/sodaxProxy.ts).
-   * The config check never lets partnerFee and feeSplit both be set. */
+   * The config check lets only one of partnerFee, rateFee and feeSplit be set. */
   feeSplit: ServerFeeSplit | null;
   coingeckoBase: string;
   coingeckoKey: string | null;
@@ -70,6 +74,7 @@ export type ServerConfig = {
 export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: boolean): ServerConfig {
   const walletOrigin = originsFor(config, dev).wallet;
   const split = config.fees.split;
+  const rate = config.fees.rateFee;
   return {
     tradingEnabled: config.features.trading,
     embeddedWallet: config.features.embeddedWallet,
@@ -81,6 +86,8 @@ export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: 
     sodaxApiKey: secrets.sodaxApiKey,
     sodaxBase: SODAX_DEFAULT_BASE,
     partnerFee: config.fees.partnerFee ? { ...config.fees.partnerFee } : null,
+    rateFee: rate ? { ...rate, stockFee: rate.stockFee ? { ...rate.stockFee } : null } : null,
+    feeReceiverName: config.fees.receiverName,
     feeSplit: split
       ? {
         splitter: split.splitter,
@@ -106,15 +113,21 @@ export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: 
 }
 
 /** What the browser may know: switches, the fee rate and receiver it will be shown, the wallet origin and the terms
- * version users confirm for tokenised stocks; never a key or a secret. With a split, partnerFeeBps is 0, feeReceiver
- * is null, and feeSplit has the receiver, each party's name and rate per 100,000, and the fee on stock swaps. */
+ * version users confirm for tokenised stocks; never a key or a secret. A plain fee has feeReceiver and
+ * feeReceiverName, and partnerFeeBps or else feeRate: its rate per 100,000 and its fee in basis points on stock swaps.
+ * With a split, partnerFeeBps is 0, the other three are null, and feeSplit has the receiver, each party's name and
+ * rate per 100,000, and the fee on stock swaps. */
 export function publicConfig(config: ServerConfig) {
   const split = config.feeSplit;
+  const rate = config.rateFee;
+  const plain = config.partnerFee ?? rate;
   return {
     tradingEnabled: config.tradingEnabled,
     sodaxConfigured: config.sodaxApiKey !== null,
     partnerFeeBps: config.partnerFee?.percentage ?? 0,
-    feeReceiver: config.partnerFee?.address ?? null,
+    feeReceiver: plain?.address ?? null,
+    feeRate: rate ? { rate: rate.rate, stockFeeBps: rate.stockFee?.percentage ?? 0 } : null,
+    feeReceiverName: plain ? config.feeReceiverName : null,
     feeSplit: split
       ? {
         receiver: split.splitter,
