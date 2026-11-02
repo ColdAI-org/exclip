@@ -20,8 +20,9 @@ only checks so far.
 | `src/FeeSplitter.sol` | The splitter: the shares, `release` and the views. Every splitter delegates to one copy of it, the implementation |
 | `src/FeeSplitterFactory.sol` | The factory: `predict`, `deploy`, and the platform's address and rate |
 | `src/SplitterProxy.sol` | The code of each splitter, a 91-byte proxy |
-| `test/` | Unit, fuzz and invariant tests. `test/utils/` holds the cheatcode declarations, a fixture, and mock tokens and payees |
+| `test/` | Unit, fuzz and invariant tests. `test/utils/` holds the cheatcode declarations, a fixture, and mock tokens and payees. `test/vectors/` holds the [vectors](#the-vectors-exclip-is-tested-against) |
 | `script/Deploy.s.sol` | Deploys a factory |
+| `script/Vectors.s.sol` | Writes the vectors |
 | `foundry.toml` | solc 0.8.28, EVM version `paris`, the optimizer at 10,000 runs |
 | `package.json` | The commands below, as pnpm scripts. It isn't part of the pnpm workspace |
 
@@ -188,6 +189,24 @@ sampleSplitter: address 0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe
 
 `sampleSplitter` is the splitter for the sample operator at 100, 0.1 %. Without `PLATFORM_RECEIVER`, the script
 stops: "PLATFORM_RECEIVER is not set, or is the zero address".
+
+## The vectors ExClip is tested against
+
+ExClip works a splitter's address out without reading the chain, in
+[`packages/config/src/fee-split.ts`](../../packages/config/src/fee-split.ts). Its tests compare it with what real
+factories work out. `script/Vectors.s.sol` deploys four factories on a fresh anvil, has them predict and deploy 11
+splitters, and records 9 cases that `predict` refuses, by the factory's error names. It writes all of it to
+`test/vectors/splitters.json`. Like the dry run, it has no `--broadcast` and sends nothing.
+
+```sh
+pnpm run anvil              # one terminal: a fresh local chain
+pnpm run vectors            # another: rewrites test/vectors/splitters.json
+```
+
+The first factory is the dry run's, so the file holds the values above: the script stops unless that factory lands
+at the dry run's address, as it does on a fresh anvil. After a change to the contracts, run it and commit the file. From the repository root, `pnpm run splitter-code` checks
+the splitter's creation code in the TypeScript against `forge inspect FeeSplitterFactory deployedBytecode`, and
+`pnpm test` checks the TypeScript against the file.
 
 ## Deploy to Sonic
 
