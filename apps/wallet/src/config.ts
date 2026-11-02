@@ -18,6 +18,13 @@ export type FeeSplitTerms = {
 export const FEE_SPLITS: readonly FeeSplitTerms[] = Object.freeze(
   typeof __EXCLIP_FEE_SPLITS__ === "undefined" ? [] : __EXCLIP_FEE_SPLITS__.map((s) => Object.freeze({ ...s })),
 );
+/** A plain fee given as a rate (exclip.config.ts fees.rate, per 100,000 of the amount paid) and its fee on swaps with
+ * a tokenised stock on either side (fees.stockFeeBps, in basis points; 0 for none). */
+export type FeeRateTerms = { rate: number; stockFeeBps: number };
+/** This build's fee rate: a fee to a listed receiver must be exactly the rate of the amount paid, rounded down, or on a
+ * swap with a tokenised stock exactly the fee on stock swaps. Null: a plain fee is held to the cap only. */
+export const FEE_RATE: FeeRateTerms | null =
+  typeof __EXCLIP_FEE_RATE__ === "undefined" || __EXCLIP_FEE_RATE__ === null ? null : Object.freeze({ ...__EXCLIP_FEE_RATE__ });
 /** Dev build (vite serve): allows http://localhost. */
 export const DEV: boolean = typeof __EXCLIP_DEV__ === "undefined" ? false : __EXCLIP_DEV__;
 /** The origin this build is configured to be served from (exclip.config.ts origins.wallet). Only for what the screens
@@ -29,6 +36,10 @@ export const BRAND_NAME: string = typeof __EXCLIP_BRAND_NAME__ === "undefined" |
 export const OPERATOR: string = typeof __EXCLIP_OPERATOR__ === "undefined" ? "" : __EXCLIP_OPERATOR__;
 /** Who the copy names when it says what the service can and can't see: the operator, else the product. */
 export const OPERATOR_NAME: string = OPERATOR || BRAND_NAME;
+/** Who the review names as getting a plain fee (exclip.config.ts fees.receiverName, which defaults to brand.name; with
+ * a fee split, the operator). OPERATOR_NAME when not defined. */
+export const FEE_RECEIVER_NAME: string =
+  typeof __EXCLIP_FEE_RECEIVER_NAME__ === "undefined" || !__EXCLIP_FEE_RECEIVER_NAME__ ? OPERATOR_NAME : __EXCLIP_FEE_RECEIVER_NAME__;
 /** How many US dollars a wallet that isn't backed up yet may hold before the popup stops showing its deposit address
  * (exclip.config.ts wallet.unbackedLimitUsd, a whole number resolveConfig has checked; nothing stops a transfer from
  * elsewhere). Where the popup applies it: wallet.ts UNBACKED_LIMIT_USD. 100 when not defined. */

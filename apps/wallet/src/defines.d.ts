@@ -7,9 +7,12 @@ declare const __EXCLIP_FEE_RECEIVERS__: readonly string[];
 declare const __EXCLIP_FEE_SPLITS__: readonly {
   factory: string; platform: string; platformName: string; platformRate: number; maxTotalRate: number; operator: string; operatorRate: number;
 }[];
+/** config.ts FeeRateTerms, or null without a fee rate. */
+declare const __EXCLIP_FEE_RATE__: { rate: number; stockFeeBps: number } | null;
 declare const __EXCLIP_DEV__: boolean;
 declare const __EXCLIP_WALLET_ORIGIN__: string;
 declare const __EXCLIP_BRAND_NAME__: string;
 declare const __EXCLIP_OPERATOR__: string;
+declare const __EXCLIP_FEE_RECEIVER_NAME__: string;
 declare const __EXCLIP_UNBACKED_LIMIT_USD__: number;
 declare const __EXCLIP_STOCKS__: boolean;

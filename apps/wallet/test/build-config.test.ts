@@ -109,7 +109,7 @@ test("production build guard: exact https origins only, and at least one parent"
   assert.throws(() => assertProductionOrigins([], PLACEHOLDER_ORIGINS.wallet), /no parent origin/);
 });
 
-test("build warnings: the example origins (production only), and a partner fee whose receiver the wallet doesn't list", () => {
+test("build warnings: the example origins (production only), and a plain fee whose receiver the wallet doesn't list", () => {
   const none = EMPTY_FEE_ALLOW_LIST;
   const receiving = (receivers: string[]): FeeAllowList => ({ ...none, receivers });
   assert.match(buildWarnings(configOf({}), none, true).join("\n"), /origins are still the examples/);
@@ -126,6 +126,14 @@ test("build warnings: the example origins (production only), and a partner fee w
   assert.deepEqual(buildWarnings(fee, receiving([receiver.toLowerCase()]), true), []);
   // A receiver without a fee: nothing to list.
   assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS, fees: { partnerFeeBps: 0, receiver } }), none, true), []);
+
+  // A fee rate goes to the same list, and so does its fee on stock swaps, which is paid to the same receiver.
+  const rate = configOf({ origins: OWN_ORIGINS, fees: { rate: 875, stockFeeBps: 25, receiver }, stocks: { enabled: true, countryHeader: "cf-ipcountry" } });
+  for (const production of [true, false]) {
+    assert.match(buildWarnings(rate, none, production).join("\n"), /the partner fee goes to 0xCdCd.*the wallet will refuse every swap that carries a fee/);
+  }
+  assert.deepEqual(buildWarnings(rate, receiving([receiver.toLowerCase()]), true), []);
+  assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS, fees: { rate: 0, receiver } }), none, true), []);
 });
 
 test("build warnings: a fee split whose split the wallet doesn't list, and a stock-swap fee whose receiver it doesn't list", () => {
@@ -155,10 +163,28 @@ test("build warnings: a fee split whose split the wallet doesn't list, and a sto
 
 test("what the wallet bakes in: the configured origins in production, DEV_ORIGINS in development", () => {
   const config = configOf({ origins: OWN_ORIGINS, brand: { name: "Swapper", operator: "Example Ltd" }, wallet: { unbackedLimitUsd: 250 } });
-  const names = { brandName: "Swapper", operator: "Example Ltd", unbackedLimitUsd: 250, stocks: false };
+  const names = { brandName: "Swapper", operator: "Example Ltd", unbackedLimitUsd: 250, stocks: false, feeRate: null, feeReceiverName: "Swapper" };
   assert.deepEqual(walletBuildConfig(config, false), { ...names, parentOrigins: [OWN_ORIGINS.app], walletOrigin: OWN_ORIGINS.wallet });
   assert.deepEqual(walletBuildConfig(config, true), { ...names, parentOrigins: [DEV_ORIGINS.app], walletOrigin: DEV_ORIGINS.wallet });
   assert.equal(walletBuildConfig(configOf({}), false).unbackedLimitUsd, 100, "the default limit");
+});
+
+test("the wallet gets a plain fee's rate and the name its review gives the receiver from exclip.config.ts", () => {
+  const receiver = "0x" + "Cd".repeat(20);
+  const brand = { name: "Swapper", operator: "Example Operator Ltd" };
+  const fee = (input: ExclipConfigInput, list?: FeeAllowList) => {
+    const { feeRate, feeReceiverName } = walletBuildConfig(configOf({ brand, ...input }, list), false);
+    return { feeRate, feeReceiverName };
+  };
+  assert.deepEqual(fee({ fees: { rate: 875, stockFeeBps: 25, receiver, receiverName: "Example Ltd" } }), { feeRate: { rate: 875, stockFeeBps: 25 }, feeReceiverName: "Example Ltd" });
+  // No fee on stock swaps is 0, and with no name the review names the brand, as the app's does.
+  assert.deepEqual(fee({ fees: { rate: 875, receiver } }), { feeRate: { rate: 875, stockFeeBps: 0 }, feeReceiverName: "Swapper" });
+  // A fee in basis points has no rate for the wallet to hold it to, only the cap; its receiver may have a name too.
+  assert.deepEqual(fee({ fees: { partnerFeeBps: 30, receiver, receiverName: "Example Ltd" } }), { feeRate: null, feeReceiverName: "Example Ltd" });
+  assert.deepEqual(fee({ fees: { rate: 0, receiver } }), { feeRate: null, feeReceiverName: "Swapper" });
+  // With a split, the plain fee is its fee on stock swaps, which goes to the operator: the review names the operator.
+  assert.deepEqual(fee({ fees: { split: { ...SPLIT, stockFeeBps: 25 } } }, allowList([])), { feeRate: null, feeReceiverName: "Example Operator Ltd" });
+  assert.deepEqual(fee({ brand: { name: "Swapper" }, fees: { split: SPLIT } }, allowList([])), { feeRate: null, feeReceiverName: "Swapper" });
 });
 
 test("the wallet signs tokenised stocks only in a build with stocks.enabled, and EXCLIP_DISABLE_STOCKS there switches them off", () => {
@@ -185,10 +211,12 @@ test("vite.config.ts: every define from exclip.config.ts or fee-receivers.json, 
       __EXCLIP_PARENT_ORIGINS__: wallet.parentOrigins,
       __EXCLIP_FEE_RECEIVERS__: parseFeeReceivers(readFileSync(FEE_RECEIVERS_FILE, "utf8")),
       __EXCLIP_FEE_SPLITS__: feeSplitTerms(parseFeeAllowList(readFileSync(FEE_RECEIVERS_FILE, "utf8"))),
+      __EXCLIP_FEE_RATE__: wallet.feeRate,
       __EXCLIP_DEV__: dev,
       __EXCLIP_WALLET_ORIGIN__: wallet.walletOrigin,
       __EXCLIP_BRAND_NAME__: wallet.brandName,
       __EXCLIP_OPERATOR__: wallet.operator,
+      __EXCLIP_FEE_RECEIVER_NAME__: wallet.feeReceiverName,
       __EXCLIP_UNBACKED_LIMIT_USD__: wallet.unbackedLimitUsd,
       __EXCLIP_STOCKS__: wallet.stocks,
     }, command);

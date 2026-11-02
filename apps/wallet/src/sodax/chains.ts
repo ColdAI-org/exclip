@@ -83,7 +83,7 @@ export function destination(key: string): { name: string; relayId: bigint; famil
 }
 
 /** Highest partner fee the wallet accepts in an intent, in basis points of the amount paid (@exclip/config
- * PARTNER_FEE_MAX_BPS, 1 %). For a fee to a fee split's splitter it limits the operator's rate instead
- * (OPERATOR_RATE_MAX, the same 1 %), and the split's total may reach its factory's listed cap: the owner's decision of
- * 2 November 2026 (docs/fee-split.md). */
+ * PARTNER_FEE_MAX_BPS, 1 %), whether a plain fee is given in basis points or as a rate (FEE_RATE_MAX, the same 1 %).
+ * For a fee to a fee split's splitter it limits the operator's rate instead (OPERATOR_RATE_MAX, the same 1 %), and the
+ * split's total may reach its factory's listed cap (docs/fee-split.md). */
 export const MAX_PARTNER_FEE_BPS = 100n;

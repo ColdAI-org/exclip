@@ -2,8 +2,8 @@
  *
  * Build config baked into the bundle (src/config.ts reads it; nothing comes from the URL, the opener or a .env file):
  *  - From exclip.config.ts, through walletBuildConfig: the one page origin allowed to open and talk to the popup
- *    (origins.app), the wallet's own origin (origins.wallet), brand.name, brand.operator, wallet.unbackedLimitUsd and
- *    stocks.enabled.
+ *    (origins.app), the wallet's own origin (origins.wallet), brand.name, brand.operator, wallet.unbackedLimitUsd,
+ *    stocks.enabled, and a plain fee's rate (fees.rate, fees.stockFeeBps) and receiver's name (fees.receiverName).
  *    Development (vite serve) always uses DEV_ORIGINS: the app on http://localhost:5173, this on :5311.
  *  - Where a partner fee may go: fee-receivers.json's plain receivers and fee splits (committed; no env). The build
  *    stops on an entry it can't vouch for, such as a split its factory would refuse.
@@ -89,10 +89,12 @@ export default defineConfig(async ({ command, isPreview }) => {
       __EXCLIP_PARENT_ORIGINS__: JSON.stringify(wallet.parentOrigins),
       __EXCLIP_FEE_RECEIVERS__: JSON.stringify(allowList.receivers),
       __EXCLIP_FEE_SPLITS__: JSON.stringify(feeSplitTerms(allowList)),
+      __EXCLIP_FEE_RATE__: JSON.stringify(wallet.feeRate),
       __EXCLIP_DEV__: JSON.stringify(dev),
       __EXCLIP_WALLET_ORIGIN__: JSON.stringify(wallet.walletOrigin),
       __EXCLIP_BRAND_NAME__: JSON.stringify(wallet.brandName),
       __EXCLIP_OPERATOR__: JSON.stringify(wallet.operator),
+      __EXCLIP_FEE_RECEIVER_NAME__: JSON.stringify(wallet.feeReceiverName),
       __EXCLIP_UNBACKED_LIMIT_USD__: JSON.stringify(wallet.unbackedLimitUsd),
       __EXCLIP_STOCKS__: JSON.stringify(wallet.stocks),
     },

@@ -8,9 +8,9 @@ import { parseFeeAllowList, sameAddress, type FeeAllowList } from "@exclip/confi
 import type { FeeSplitTerms } from "./src/config.ts";
 
 /** The fee allow-list: `fee-receivers.json`, committed with the code rather than taken from the environment, so
- * changing it takes a reviewed commit. Its receivers must contain exclip.config.ts fees.receiver when a partner fee is
- * set, and its splits the config's fees.split when a split is set; empty → the wallet refuses any fee. The config
- * check reads the same file for the factories a split may use. */
+ * changing it takes a reviewed commit. Its receivers must contain exclip.config.ts fees.receiver when a plain fee is
+ * set (fees.partnerFeeBps or fees.rate above 0), and its splits the config's fees.split when a split is set; empty →
+ * the wallet refuses any fee. The config check reads the same file for the factories a split may use. */
 export const FEE_RECEIVERS_FILE = fileURLToPath(new URL("./fee-receivers.json", import.meta.url));
 
 /** The plain-fee receivers an intent may name, in lower case. The whole file is checked (parseFeeAllowList), so the
@@ -57,7 +57,8 @@ export function buildWarnings(config: ExclipConfig, allowList: FeeAllowList, pro
         "which nobody can serve: this build works nowhere. Set origins.app and origins.wallet.",
     );
   }
-  const fee = config.fees.partnerFee;
+  // A plain fee, in basis points or as a rate; a rate's fee on stock swaps goes to the same receiver.
+  const fee = config.fees.partnerFee ?? config.fees.rateFee;
   if (fee && !allowList.receivers.includes(fee.address.toLowerCase())) {
     warnings.push(
       `exclip.config.ts: the partner fee goes to ${fee.address}, which apps/wallet/fee-receivers.json does not list: ` +

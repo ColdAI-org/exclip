@@ -635,11 +635,13 @@ export function webBuildConfig(config: ExclipConfig, dev: boolean) {
 export type WebBuildConfig = ReturnType<typeof webBuildConfig>;
 
 /** What apps/wallet bakes into its bundle: the one page origin it answers, its own origin, the names it shows, the
- * deposit limit for a wallet that isn't backed up yet (the popup enforces its own copy; the page's is only a hint) and
+ * deposit limit for a wallet that isn't backed up yet (the popup enforces its own copy; the page's is only a hint),
  * whether it signs swaps and sends of tokenised stocks (stocks.enabled, after EXCLIP_DISABLE_STOCKS where the wallet is
- * built). */
+ * built), and a plain fee's rate, which a fee to a listed receiver must then be exactly. Where a fee may go comes from
+ * fee-receivers.json, never from here: the rate only narrows what the wallet signs. */
 export function walletBuildConfig(config: ExclipConfig, dev: boolean) {
   const origins = originsFor(config, dev);
+  const rateFee = config.fees.rateFee;
   return {
     brandName: config.brand.name,
     operator: config.brand.operator,
@@ -647,6 +649,10 @@ export function walletBuildConfig(config: ExclipConfig, dev: boolean) {
     walletOrigin: origins.wallet,
     unbackedLimitUsd: config.wallet.unbackedLimitUsd,
     stocks: config.stocks.enabled,
+    feeRate: rateFee ? { rate: rateFee.rate, stockFeeBps: rateFee.stockFee?.percentage ?? 0 } : null,
+    // Who the review names as getting a plain fee. With a split, the plain fee is the one on stock swaps, which goes to
+    // the operator.
+    feeReceiverName: config.fees.split ? config.brand.operator || config.brand.name : config.fees.receiverName,
   };
 }
 
