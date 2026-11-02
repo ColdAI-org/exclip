@@ -486,9 +486,9 @@ there means that one file holds every address a fee may go to, and one
 reviewed commit changes it. A second file, in `packages/config`, would
 need the same review, and could drift from this one.
 
-A DEX launched through ColdAI's launch plugin gets the platform's factory
-and its own split from the plugin, in its own copy. This repository lists
-neither ([the owner's decisions](#the-owners-decisions)).
+A DEX that pays the platform's fee lists the platform's factory and its own
+split in its own copy. This repository lists neither
+([the owner's decisions](#the-owners-decisions)).
 
 ### The server
 
@@ -686,8 +686,8 @@ The owner decided these, and the code follows them:
    audited.
 3. **A neutral repository.** The default config charges no fee. The
    allow-list's `factories` and `splits` ship empty, and no file here names
-   the platform's receiving address, its factory or a split of it. ColdAI's
-   launch plugin adds those entries in its own repository. The platform's
+   the platform's receiving address, its factory or a split of it. A copy
+   that pays the platform's fee adds those entries itself. The platform's
    name on a review comes from the allow-list entry, never from code. Tests
    and examples use the local dry run's factory and placeholder addresses
    such as `0x1111…1111` and `0x2222…2222`.
