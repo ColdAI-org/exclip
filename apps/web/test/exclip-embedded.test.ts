@@ -418,6 +418,7 @@ const SPLIT_CONFIG: FeeConfig = {
   feeSplit: { receiver: SPLITTER, totalRate: 975, platform: { name: "Example Platform", rate: 875 }, operator: { name: "Example Operator Ltd", rate: 100 }, stockFee: null },
 };
 const PLAIN_CONFIG: FeeConfig = { partnerFeeBps: 30, feeReceiver: OWN, feeSplit: null };
+const RATE_CONFIG: FeeConfig = { partnerFeeBps: 0, feeReceiver: OWN, feeRate: { rate: 875, stockFeeBps: 0 }, feeReceiverName: "Example Ltd", feeSplit: null };
 
 test("the SDK has no fee of its own; each swap's fee is lib/fees.ts's, and the SDK writes exactly that fee", async () => {
   // So a swap that pays nothing (one with a stock in it, under a split) can't fall back to a fee.
@@ -430,11 +431,11 @@ test("the SDK has no fee of its own; each swap's fee is lib/fees.ts's, and the S
   // fee, that is the only kind the popup signs unless the receiver is on its reviewed list (apps/wallet/fee-receivers.json).
   const [feeData, feeAmount] = EvmSolverService.createIntentFeeData(undefined, 1_000_000n);
   assert.deepEqual([feeData, feeAmount, IntentDataService.composeIntentData(feeData)], ["0x", 0n, "0x"]);
-  // A split's amount and a plain fee's basis points: the SDK takes off the total the review shows, and writes that
-  // amount and the receiver into the intent's data (type 1, FEE: abi.encode(fee, receiver)).
+  // A split's or a fee rate's amount and a plain fee's basis points: the SDK takes off the total the review shows, and
+  // writes that amount and the receiver into the intent's data (type 1, FEE: abi.encode(fee, receiver)).
   const word = (hex: string) => hex.padStart(64, "0");
   const sold = 1_000_000_000n;
-  for (const config of [SPLIT_CONFIG, PLAIN_CONFIG]) {
+  for (const config of [SPLIT_CONFIG, RATE_CONFIG, PLAIN_CONFIG]) {
     const fee = swapFee(config, sold, false);
     const [data, amount] = EvmSolverService.createIntentFeeData(fee.intent, sold);
     assert.equal(amount, fee.total);

@@ -13,9 +13,15 @@ export const SODAX_BASE = `${API_BASE}/sodax`;
 export type ExclipPublicConfig = {
   tradingEnabled: boolean;
   sodaxConfigured: boolean;
-  /** A plain fee (fees.partnerFeeBps and fees.receiver): 0 and null without one, and with a fee split. */
+  /** A plain fee in basis points (fees.partnerFeeBps): 0 without one, with a fee rate and with a fee split. */
   partnerFeeBps: number;
+  /** A plain fee's receiver (fees.receiver), in basis points or as a rate: null without one, and with a fee split. */
   feeReceiver: string | null;
+  /** A plain fee given as a rate (fees.rate), or null: per 100,000 of the amount sold (docs/fees.md), and its own fee
+   * in basis points on a swap with a tokenised stock on either side, 0 for none. */
+  feeRate?: { rate: number; stockFeeBps: number } | null;
+  /** Who the review names as getting a plain fee (fees.receiverName, or brand.name): null without one. */
+  feeReceiverName?: string | null;
   /** A fee split (fees.split), or null. Rates are per 100,000 of the amount sold (docs/fee-split.md). */
   feeSplit?: PublicFeeSplit | null;
   /** Whether this server offers the passkey wallet (features.embeddedWallet). */

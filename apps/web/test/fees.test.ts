@@ -18,15 +18,22 @@ const SPLIT: PublicFeeSplit = {
 };
 const withSplit = (over: Partial<PublicFeeSplit> = {}): FeeConfig => ({ partnerFeeBps: 0, feeReceiver: null, feeSplit: { ...SPLIT, ...over } });
 const plain = (partnerFeeBps: number, feeReceiver: string | null): FeeConfig => ({ partnerFeeBps, feeReceiver, feeSplit: null });
+/** A plain fee as a rate, as /config publishes it: partnerFeeBps 0, the receiver, the rate and its name. */
+const rated = (rate: number, stockFeeBps = 0, feeReceiverName: string | null = "Example Ltd"): FeeConfig =>
+  ({ partnerFeeBps: 0, feeReceiver: OWN, feeRate: { rate, stockFeeBps }, feeReceiverName, feeSplit: null });
 
 const NONE = { intent: undefined, total: 0n, lines: [] };
 const USDC_1000 = 1_000_000_000n;
 
 test("no fee: no config yet, no amount, or a server that charges none", () => {
-  for (const config of [null, undefined, plain(0, null), plain(30, null), plain(0, OWN), { partnerFeeBps: 0, feeReceiver: null }]) {
+  for (const config of [null, undefined, plain(0, null), plain(30, null), plain(0, OWN), { partnerFeeBps: 0, feeReceiver: null },
+    { ...rated(875), feeReceiver: null }]) {
     assert.deepEqual(swapFee(config, USDC_1000, false), NONE, JSON.stringify(config));
   }
-  for (const amount of [null, 0n, -1n]) assert.deepEqual(swapFee(withSplit(), amount, false), NONE, String(amount));
+  for (const amount of [null, 0n, -1n]) {
+    assert.deepEqual(swapFee(withSplit(), amount, false), NONE, String(amount));
+    assert.deepEqual(swapFee(rated(875), amount, false), NONE, String(amount));
+  }
 });
 
 test("a plain fee: basis points to the receiver on every swap, stocks included, as before", () => {
@@ -35,6 +42,48 @@ test("a plain fee: basis points to the receiver on every swap, stocks included, 
   assert.deepEqual(swapFee(plain(10, OWN), USDC_1000, true), expected);
   // Rounded down, as the SDK rounds a percentage.
   assert.equal(swapFee(plain(10, OWN), 999n, false).total, 0n);
+  // The review names the receiver when /config does.
+  assert.deepEqual(swapFee({ ...plain(10, OWN), feeReceiverName: "Example Ltd" }, USDC_1000, true).lines,
+    [{ party: "Example Ltd", rate: 100, amount: 1_000_000n }]);
+});
+
+test("a fee rate: one amount to the receiver, the rate of the amount sold, rounded down, named after the receiver", () => {
+  // 1,000 USDC sold at 875 per 100,000: 8.75 USDC, on the review as "Example Ltd fee (0.875%)".
+  assert.deepEqual(swapFee(rated(875), USDC_1000, false), {
+    intent: { address: OWN, amount: 8_750_000n },
+    total: 8_750_000n,
+    lines: [{ party: "Example Ltd", rate: 875, amount: 8_750_000n }],
+  });
+  assert.equal(feeRate(875), "0.875%");
+  // The amount the server pins for the same sale (apps/server/test/exclip.test.ts), so the two never disagree.
+  assert.deepEqual(swapFee(rated(875), 1_234_567n, false).intent, { address: OWN, amount: 10_802n });
+  // The amount alone, as the server pins it: no percentage goes with it.
+  assert.equal("percentage" in (swapFee(rated(875), USDC_1000, false).intent ?? {}), false);
+  // A server that names no receiver: the review names this site.
+  assert.equal(swapFee(rated(875, 0, null), USDC_1000, false).lines[0]?.party, null);
+});
+
+test("a fee rate that rounds down to nothing sends no fee, and 1 unit from the first amount that reaches it", () => {
+  // 114 units at 875 per 100,000 is 0.9975 of a unit: no fee data in the intent, as the server pins none.
+  const dust = swapFee(rated(875), 114n, false);
+  assert.equal(dust.intent, undefined);
+  assert.equal(dust.total, 0n);
+  assert.deepEqual(dust.lines, [{ party: "Example Ltd", rate: 875, amount: 0n }]);
+  assert.deepEqual(swapFee(rated(875), 115n, false).intent, { address: OWN, amount: 1n });
+  // At the lowest rate, 1 per 100,000.
+  assert.equal(swapFee(rated(1), 99_999n, false).intent, undefined);
+  assert.deepEqual(swapFee(rated(1), 100_000n, false).intent, { address: OWN, amount: 1n });
+});
+
+test("a fee rate with a stock on either side: only its fee on stock swaps, in basis points, or none", () => {
+  assert.deepEqual(swapFee(rated(875), USDC_1000, true), NONE);
+  assert.deepEqual(swapFee(rated(875, 25), USDC_1000, true), {
+    intent: { address: OWN, percentage: 25 },
+    total: 2_500_000n,
+    lines: [{ party: "Example Ltd", rate: 250, amount: 2_500_000n }],
+  });
+  // The fee on stock swaps is for stock swaps only: a crypto swap still pays the rate.
+  assert.deepEqual(swapFee(rated(875, 25), USDC_1000, false).intent, { address: OWN, amount: 8_750_000n });
 });
 
 test("a split: one amount to the splitter, the platform's and the operator's rates of the amount sold, rounded down", () => {
@@ -68,7 +117,6 @@ test("a split that rounds down to nothing sends no fee, and a party at 0 gets no
 });
 
 test("a split with a stock on either side: never the splitter, only the operator's own fee, or none", () => {
-  // The owner's choice of 2 November 2026 (docs/fee-split.md).
   assert.deepEqual(swapFee(withSplit(), USDC_1000, true), NONE);
   assert.deepEqual(swapFee(withSplit({ stockFee: { receiver: OPERATOR, bps: 25 } }), USDC_1000, true), {
     intent: { address: OPERATOR, percentage: 25 },

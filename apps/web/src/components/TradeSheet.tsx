@@ -111,8 +111,8 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
     return toUnits(plain(dollars / fromPrice, Math.min(fromToken.decimals, 8)), fromToken.decimals);
   }, [input, mode, fromToken, fromPrice]);
 
-  // The fee on this amount, as the intent will carry it (lib/fees.ts): a plain fee, a split's two shares, or on a swap
-  // with a stock in it only the operator's own fee.
+  // The fee on this amount, as the intent will carry it (lib/fees.ts): a plain fee in basis points or as a rate, a
+  // split's two shares, or on a swap with a stock in it only the fee on stock swaps.
   const fee = useMemo(() => swapFee(config, units, stockLeg), [config, units, stockLeg]);
   const netUnits = units ? units - fee.total : null;
 
@@ -279,7 +279,7 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
           <Row k="Network fee" v="Paid in gas on the source network; your wallet shows it before you sign" />
           {fee.lines.length
             ? fee.lines.map((line, i) => <Row key={i} k={`${line.party ?? BRAND.name} fee (${feeRate(line.rate)})`} v={feeAmount(line.amount)} />)
-            : <Row k={`${BRAND.name} fee`} v="None" />}
+            : <Row k={`${config?.feeReceiverName ?? BRAND.name} fee`} v="None" />}
           <Row k="SODAX fee" v="Included in the rate" />
           <Row k={`Minimum received (${slippage}% slippage)`} v={minOut != null && toToken ? `${fmtAmount(Number(fromUnits(minOut, toToken.decimals)))} ${sides.to.symbol}` : "—"} />
           <Row k="Estimated time" v={est ? `About ${duration(est)}` : "—"} />
