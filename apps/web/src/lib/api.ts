@@ -13,8 +13,11 @@ export const SODAX_BASE = `${API_BASE}/sodax`;
 export type ExclipPublicConfig = {
   tradingEnabled: boolean;
   sodaxConfigured: boolean;
+  /** A plain fee (fees.partnerFeeBps and fees.receiver): 0 and null without one, and with a fee split. */
   partnerFeeBps: number;
   feeReceiver: string | null;
+  /** A fee split (fees.split), or null. Rates are per 100,000 of the amount sold (docs/fee-split.md). */
+  feeSplit?: PublicFeeSplit | null;
   /** Whether this server offers the passkey wallet (features.embeddedWallet). */
   embeddedWallet?: boolean;
   /** The wallet popup's exact origin, or null when the passkey wallet is off. */
@@ -25,6 +28,20 @@ export type ExclipPublicConfig = {
   stocksEnabled?: boolean;
   /** The terms the user confirms before trading stocks (stocks.termsVersion), or null while stocks are off. */
   stocksTermsVersion?: string | null;
+};
+
+/** /config's feeSplit: one fee to the splitter, which pays the platform and the operator their shares. */
+export type PublicFeeSplit = {
+  /** The splitter's address, the fee's one receiver. */
+  receiver: string;
+  /** platform.rate + operator.rate. */
+  totalRate: number;
+  /** The platform's name comes from its factory's entry on the wallet's fee allow-list. */
+  platform: { name: string; rate: number };
+  operator: { name: string; rate: number };
+  /** The operator's own plain fee on a swap with a tokenised stock on either side, which never pays the splitter; null
+   * for no fee on those swaps. */
+  stockFee: { receiver: string; bps: number } | null;
 };
 
 export type ChartRange = "1H" | "1D" | "1W" | "1M" | "1Y" | "ALL";
@@ -115,15 +132,13 @@ export function useExclipConfig() {
 }
 
 /**
- * The SODAX SDK's options: its API calls go through this server's key proxy, and it gets a partner fee only when this
- * server reports one (a receiver and more than 0 bps). Without one the SDK builds intents with empty data, the only
- * kind the wallet popup signs unless the receiver is on its reviewed fee allowlist.
+ * The SODAX SDK's options: its API calls go through this server's key proxy. It gets no partner fee of its own: each
+ * swap passes the fee ./fees.ts works out (createIntent's extras.partnerFee), because a split's fee is an amount that
+ * depends on the swap, and a swap with a stock in it must not fall back to one. A swap without a fee gets intents with
+ * empty data, the only kind the wallet popup signs unless the receiver is on its reviewed fee allow-list.
  */
-export function sodaxOptions(config: Pick<ExclipPublicConfig, "partnerFeeBps" | "feeReceiver"> | null | undefined, origin: string) {
-  const fee = config?.feeReceiver && config.partnerFeeBps > 0
-    ? { address: config.feeReceiver as `0x${string}`, percentage: config.partnerFeeBps }
-    : undefined;
-  return { api: { baseURL: `${origin}${SODAX_BASE}` }, ...(fee ? { swaps: { partnerFee: fee } } : {}) };
+export function sodaxOptions(origin: string) {
+  return { api: { baseURL: `${origin}${SODAX_BASE}` } };
 }
 
 export function useMarkets(opts: Q<MarketsPayload> = {}) {

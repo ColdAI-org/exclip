@@ -68,6 +68,11 @@ export function pct(value: number | null | undefined, { sign = true, decimals = 
   return (value > 0 ? "+" : value < 0 ? "−" : "") + s;
 }
 
+/** A fee's rate, given per 100,000 of the amount sold, as a percentage: 875 is 0.875%, 100 is 0.10%. */
+export function feeRate(perHundredThousand: number): string {
+  return nf({ minimumFractionDigits: 2, maximumFractionDigits: 3 }).format(perHundredThousand / 1_000) + "%";
+}
+
 export function direction(value: number | null | undefined): "up" | "down" | "flat" {
   if (value == null || !Number.isFinite(value) || value === 0) return "flat";
   return value > 0 ? "up" : "down";

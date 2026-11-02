@@ -24,6 +24,7 @@ import {
   splitterInitCodeHash,
   type SplitFactory,
 } from "../src/fee-split.ts";
+import * as rates from "../src/fee-rates.ts";
 import { PARTNER_FEE_MAX_BPS } from "../src/index.ts";
 
 type Vectors = {
@@ -184,6 +185,15 @@ test("rates read as percentages, and an operator's rate is capped at the plain f
   const cases: [number, string][] = [[0, "0"], [1, "0.001"], [10, "0.01"], [100, "0.1"], [875, "0.875"], [1_000, "1"], [1_050, "1.05"], [1_875, "1.875"], [100_000, "100"]];
   for (const [rate, text] of cases) assert.equal(formatRate(rate), text, String(rate));
   assert.equal(OPERATOR_RATE_MAX, (PARTNER_FEE_MAX_BPS * RATE_SCALE) / 10_000);
+});
+
+test("the app's copy of the arithmetic is this one, and imports nothing", () => {
+  // The app bundles @exclip/config/fee-rates for the review and the intent's fee; keccak must not come with it.
+  assert.doesNotMatch(readFileSync(new URL("../src/fee-rates.ts", import.meta.url), "utf8"), /^\s*import\b/m);
+  assert.deepEqual(
+    [rates.RATE_SCALE, rates.OPERATOR_RATE_MAX, rates.formatRate, rates.splitFee, rates.splitShares],
+    [RATE_SCALE, OPERATOR_RATE_MAX, formatRate, splitFee, splitShares],
+  );
 });
 
 /* ------------------------------------------------------------------ the fee allow-list */

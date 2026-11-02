@@ -21,6 +21,8 @@ export type SwapInput = {
   deadline: bigint;
   dstAddress?: string;
   kind: "market" | "limit";
+  /** Whether either token is a tokenised stock (SODAX flags it isRwa). Such a swap never pays a fee split (lib/fees.ts). */
+  stockLeg: boolean;
 };
 
 export type SwapProgress =

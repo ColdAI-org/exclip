@@ -65,10 +65,24 @@ const POPUP = { viewport: { width: 420, height: 720 }, deviceScaleFactor: 1 };
 /* ------------------------------------------------------------------ fixtures */
 
 const fixture = (name) => JSON.parse(readFileSync(join(HERE, "fixtures", name), "utf8"));
-/** /api/exclip/config. With --brand it carries the configured fee, as apps/server's publicConfig would. */
+/** /api/exclip/config. With --brand it carries the configured fee, a plain one or a split, as apps/server's publicConfig
+ * would. */
+const SPLIT = OWN?.fees.split;
 const CONFIG = {
   ...fixture("config.json"),
-  ...(OWN && { partnerFeeBps: OWN.fees.partnerFee?.percentage ?? 0, feeReceiver: OWN.fees.partnerFee?.address ?? null }),
+  ...(OWN && {
+    partnerFeeBps: OWN.fees.partnerFee?.percentage ?? 0,
+    feeReceiver: OWN.fees.partnerFee?.address ?? null,
+    feeSplit: SPLIT
+      ? {
+        receiver: SPLIT.splitter,
+        totalRate: SPLIT.totalRate,
+        platform: { name: SPLIT.platformName, rate: SPLIT.platformRate },
+        operator: { name: OWN.brand.operator || OWN.brand.name, rate: SPLIT.operatorRate },
+        stockFee: SPLIT.stockFee ? { receiver: SPLIT.stockFee.address, bps: SPLIT.stockFee.percentage } : null,
+      }
+      : null,
+  }),
 };
 const ACCOUNT = fixture("account.json");
 const MARKET = new Map(fixture("markets.json").rows.map((r) => [r.symbol, r]));

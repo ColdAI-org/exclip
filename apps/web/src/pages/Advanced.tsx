@@ -78,6 +78,7 @@ function OrderPanel({ base, quote, price }: { base: string; quote: string; price
       const out = await actions.swap({
         srcChainKey: pay.chainKey, dstChainKey: get.chainKey, inputToken: pay.address, outputToken: get.address,
         inputAmount: a.input, minOutputAmount: a.minOut, deadline: BigInt(expiresAt ?? 0), kind: "limit",
+        stockLeg: pay.isRwa === true || get.isRwa === true,
       }, () => {});
       addActivity({
         id, kind: "limit", status: "open",

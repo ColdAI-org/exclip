@@ -12,6 +12,7 @@
  */
 import { MAX_TXS, type Hex, type SignRequest, type SignResult, type SwapPlan, type TransferPlan, type UnsignedTx } from "./wallet-protocol";
 import { stockRefusalText } from "./stock-gate";
+import type { IntentFee } from "./fees";
 import type { SerializedIntent, SwapInput, SwapOutcome, SwapProgress } from "./wallet";
 
 /** The networks the popup signs on (apps/wallet/src/sodax/chains.ts EVM_CHAINS; a test keeps them equal). */
@@ -175,7 +176,8 @@ type SdkRawTx = { to: string; data: string; value: bigint };
 export type SodaxSwaps = {
   isAllowanceValid(params: Record<string, unknown>): Promise<Result<boolean>>;
   buildApproveTxs(params: Record<string, unknown>): Promise<Result<{ resetTx?: SdkRawTx; approveTx: SdkRawTx }>>;
-  createIntent(params: Record<string, unknown>, skipSimulation: boolean): Promise<Result<{ tx: SdkRawTx; intent: object; relayData: unknown }>>;
+  /** `partnerFee` is the swap's fee from lib/fees.ts (the SDK's extras.partnerFee), or undefined for none. */
+  createIntent(params: Record<string, unknown>, skipSimulation: boolean, partnerFee: IntentFee | undefined): Promise<Result<{ tx: SdkRawTx; intent: object; relayData: unknown }>>;
   /** Relays a spoke transaction to the hub; returns the hub transaction hash. */
   relay(srcChainKey: string, srcTxHash: Hex, relayData: unknown): Promise<Result<string>>;
   postExecution(hubTxHash: string): Promise<Result<unknown>>;
@@ -202,12 +204,13 @@ const asRaw = (tx: SdkRawTx, kind: RawTx["kind"]): RawTx => {
 };
 
 /**
- * A market swap through the embedded wallet. `signer` is the popup, opened by the caller in the click handler. Throws
- * EmbeddedTradeError; `sent` on it means something reached the chain.
+ * A market swap through the embedded wallet. `signer` is the popup, opened by the caller in the click handler; the intent
+ * carries `opts.partnerFee`, which the popup checks against its own rules. Throws EmbeddedTradeError; `sent` on it means
+ * something reached the chain.
  */
 export async function embeddedSwap(
   sodax: SodaxSwaps, signer: Signer, input: SwapInput, ownEvm: string,
-  onProgress: (p: SwapProgress) => void, opts: { signOnly?: boolean } = {},
+  onProgress: (p: SwapProgress) => void, opts: { signOnly?: boolean; partnerFee?: IntentFee } = {},
 ): Promise<SwapOutcome> {
   const problem = embeddedSwapProblem(input, ownEvm);
   if (problem) throw new EmbeddedTradeError(problem);
@@ -228,7 +231,7 @@ export async function embeddedSwap(
       raws.push(asRaw(a.approveTx, "approve"));
     }
     // Simulation can't pass before the approval exists; the popup checks the payload either way.
-    created = unwrap(await sodax.createIntent(params, raws.length > 0), "SODAX couldn't build this trade. Nothing was sent.");
+    created = unwrap(await sodax.createIntent(params, raws.length > 0, opts.partnerFee), "SODAX couldn't build this trade. Nothing was sent.");
     raws.push(asRaw(created.tx, "swap"));
     const txs = await fillTxs(sodax.rpc(input.srcChainKey), ownEvm, raws);
     request = { chainKey: input.srcChainKey, from: ownEvm, plan: swapPlan(input, ownEvm), txs };

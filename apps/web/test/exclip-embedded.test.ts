@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { EvmSolverService, IntentDataService, Sodax, SodaxError, SwapsApiError } from "@sodax/sdk";
 import { STOCK_REFUSALS } from "@exclip/config/stocks";
 import { sodaxOptions } from "../src/lib/api.ts";
+import { swapFee, type FeeConfig } from "../src/lib/fees.ts";
 import { EmbeddedWalletError, WalletPopup, validWalletOrigin, type PopupMessage } from "../src/lib/embedded-client.ts";
 import {
   APPROVE_GAS, BROWSER_WALLET_MESSAGE, EMBEDDED_CHAINS, EmbeddedTradeError, MAX_FEE_PER_GAS, SIGN_ONLY_MESSAGE, SWAP_GAS_AFTER_APPROVAL,
@@ -296,7 +297,7 @@ test("the embedded network list matches what the popup signs on", () => {
 
 const swapInput = (over: Partial<SwapInput> = {}): SwapInput => ({
   srcChainKey: "0x2105.base", dstChainKey: "ethereum", inputToken: USDC_BASE, outputToken: USDC_ETHEREUM,
-  inputAmount: 1_000_000n, minOutputAmount: 990_000n, deadline: 2_000_000_000n, kind: "market", ...over,
+  inputAmount: 1_000_000n, minOutputAmount: 990_000n, deadline: 2_000_000_000n, kind: "market", stockLeg: false, ...over,
 });
 
 test("swap problems are caught before the popup opens", () => {
@@ -321,8 +322,8 @@ function fakeSodax({ allowed = true, reset = false, rpc = fakeRpc(), relay = { o
       calls.push(["approve", p]);
       return { ok: true, value: { ...(reset ? { resetTx: { to: "0xtoken", data: "0xreset", value: 0n } } : {}), approveTx: { to: "0xtoken", data: "0xapprove", value: 0n } } };
     },
-    async createIntent(p, skip) {
-      calls.push(["create", p, skip]);
+    async createIntent(p, skip, fee) {
+      calls.push(["create", p, skip, fee]);
       // SODAX's own numbers: the popup compares these to the plan, so the plan must not copy them.
       return { ok: true, value: { tx: { to: "0xam", data: "0xswap", value: 0n }, intent: { intentId: 9n, inputAmount: 999_000n, deadline: 2_000_000_000n, allowPartialFill: false }, relayData: { r: 1 } } };
     },
@@ -410,31 +411,63 @@ test("a refusal from the stock check reaches the user as its reason, through the
 const sdkSettings = (options: ReturnType<typeof sodaxOptions>) =>
   (new Sodax(options as ConstructorParameters<typeof Sodax>[0]) as unknown as { config: { swapPartnerFee?: unknown; moneyMarketPartnerFee?: unknown } }).config;
 
-test("partner fee only when the server reports a receiver and more than 0 bps; without one, intents carry empty data", async () => {
-  // A server without a fee, and every half-set fee the server refuses to pin: the SDK resolves no fee at all.
-  for (const config of [{ partnerFeeBps: 0, feeReceiver: null }, { partnerFeeBps: 30, feeReceiver: null }, { partnerFeeBps: 0, feeReceiver: OWN }, null, undefined]) {
-    const options = sodaxOptions(config, APP);
-    assert.deepEqual(options, { api: { baseURL: `${APP}/api/exclip/sodax` } }, JSON.stringify(config));
-    const sdk = sdkSettings(options);
-    assert.equal(sdk.swapPartnerFee ?? null, null);
-    assert.equal(sdk.moneyMarketPartnerFee ?? null, null);
-  }
+// A fee split as /config publishes it, with placeholders: the splitter is contracts/fee-split/README.md's example.
+const SPLITTER = "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe";
+const SPLIT_CONFIG: FeeConfig = {
+  partnerFeeBps: 0, feeReceiver: null,
+  feeSplit: { receiver: SPLITTER, totalRate: 975, platform: { name: "Example Platform", rate: 875 }, operator: { name: "Example Operator Ltd", rate: 100 }, stockFee: null },
+};
+const PLAIN_CONFIG: FeeConfig = { partnerFeeBps: 30, feeReceiver: OWN, feeSplit: null };
+
+test("the SDK has no fee of its own; each swap's fee is lib/fees.ts's, and the SDK writes exactly that fee", async () => {
+  // So a swap that pays nothing (one with a stock in it, under a split) can't fall back to a fee.
+  const options = sodaxOptions(APP);
+  assert.deepEqual(options, { api: { baseURL: `${APP}/api/exclip/sodax` } });
+  const sdk = sdkSettings(options);
+  assert.equal(sdk.swapPartnerFee ?? null, null);
+  assert.equal(sdk.moneyMarketPartnerFee ?? null, null);
   // The SDK's encoding of "no fee": empty intent data (2.2.0; an upgrade that adds a default fee fails here). Without a
   // fee, that is the only kind the popup signs unless the receiver is on its reviewed list (apps/wallet/fee-receivers.json).
   const [feeData, feeAmount] = EvmSolverService.createIntentFeeData(undefined, 1_000_000n);
   assert.deepEqual([feeData, feeAmount, IntentDataService.composeIntentData(feeData)], ["0x", 0n, "0x"]);
-  // A fee the server does pin reaches the SDK as is.
-  assert.deepEqual(sdkSettings(sodaxOptions({ partnerFeeBps: 30, feeReceiver: OWN }, APP)).swapPartnerFee, { address: OWN, percentage: 30 });
+  // A split's amount and a plain fee's basis points: the SDK takes off the total the review shows, and writes that
+  // amount and the receiver into the intent's data (type 1, FEE: abi.encode(fee, receiver)).
+  const word = (hex: string) => hex.padStart(64, "0");
+  const sold = 1_000_000_000n;
+  for (const config of [SPLIT_CONFIG, PLAIN_CONFIG]) {
+    const fee = swapFee(config, sold, false);
+    const [data, amount] = EvmSolverService.createIntentFeeData(fee.intent, sold);
+    assert.equal(amount, fee.total);
+    assert.equal(data, `0x01${word(fee.total.toString(16))}${word(fee.intent!.address.slice(2).toLowerCase())}`);
+  }
 
-  // The embedded swap's own requests to SODAX: empty data, no fee and no hook at every step (the fee is the SDK's).
+  // The embedded swap's own requests to SODAX: empty data, no fee and no hook at every step. The fee goes to createIntent
+  // alone, as extras.partnerFee.
   const sodax = fakeSodax({ allowed: false });
-  await embeddedSwap(sodax, fakeSigner(), swapInput(), OWN, () => {});
+  await embeddedSwap(sodax, fakeSigner(), swapInput(), OWN, () => {}, { partnerFee: swapFee(SPLIT_CONFIG, 1_000_000n, false).intent });
   const steps = sodax.calls.filter(c => ["allowance", "approve", "create"].includes(c[0]));
   assert.deepEqual(steps.map(c => c[0]), ["allowance", "approve", "create"]);
   for (const [step, p] of steps) {
     const params = p as Record<string, unknown>;
     assert.deepEqual([params.data, "partnerFee" in params, "hook" in params], ["0x", false, false], step);
   }
+  assert.deepEqual(call(sodax, "create")?.[3], { address: SPLITTER, amount: 9_750n });
+  const none = fakeSodax();
+  await embeddedSwap(none, fakeSigner(), swapInput(), OWN, () => {});
+  assert.equal(call(none, "create")?.[3], undefined);
+});
+
+test("the browser wallet's path: the SDK's swap and createLimitOrder hand extras.partnerFee on to createIntent", async () => {
+  // wallet-runtime.tsx passes the fee this way; createIntent then prefers it to the SDK's own (none). Stopped at
+  // createIntent, so nothing reaches a network.
+  const swaps = new Sodax(sodaxOptions(APP) as ConstructorParameters<typeof Sodax>[0]).swaps as unknown as Record<"swap" | "createLimitOrder" | "createIntent", (p: unknown) => Promise<unknown>>;
+  const seen: unknown[] = [];
+  swaps.createIntent = async p => { seen.push((p as { extras?: unknown }).extras); return { ok: false, error: new Error("stop") }; };
+  const partnerFee = { address: SPLITTER, amount: 9_750n };
+  const params = { srcChainKey: "0x2105.base", dstChainKey: "ethereum", inputToken: USDC_BASE, outputToken: USDC_ETHEREUM, inputAmount: 1_000_000n, minOutputAmount: 1n, deadline: 2_000_000_000n, allowPartialFill: false, srcAddress: OWN, dstAddress: OWN, data: "0x" };
+  await swaps.swap({ params, walletProvider: {}, extras: { partnerFee } });
+  await swaps.createLimitOrder({ params, walletProvider: {}, extras: { partnerFee } });
+  assert.deepEqual(seen, [{ partnerFee }, { partnerFee }]);
 });
 
 test("embedded send: one transfer, broadcast once", async () => {

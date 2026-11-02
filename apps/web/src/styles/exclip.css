@@ -351,7 +351,9 @@ body { margin: 0; }
 /* ---------- Definition lists (review, order panel) ---------- */
 .exclip .x-dl { display: flex; flex-direction: column; border-top: 1px solid var(--x-line); }
 .exclip .x-dl-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--x-line); font-size: 14px; }
-.exclip .x-dl-row dt { color: var(--x-text-2); flex: none; max-width: 50%; }
+/* A label wraps within its half of the row. A long name with no spaces, such as a fee party's, breaks rather than run
+ * into the value beside it. */
+.exclip .x-dl-row dt { color: var(--x-text-2); flex: none; max-width: 50%; overflow-wrap: anywhere; }
 .exclip .x-dl-row dd { text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .exclip .x-dl-tight .x-dl-row { padding: 7px 0; }
 .exclip .x-route { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

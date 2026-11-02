@@ -25,6 +25,7 @@ import { ArrowLeft, Check, ExternalLink, KeyRound, Loader2, Wallet as WalletIcon
 import { STOCKS_ATTESTATION_HEADER } from "@exclip/config/stocks";
 import { sodaxOptions, useExclipConfig, useSodaxTokens, type SodaxToken } from "./api";
 import { BRAND } from "./brand";
+import { swapFee } from "./fees";
 import { networkMeta } from "./catalog";
 import { SELF_CUSTODY, connectEmbedded, devSignOnly, embeddedErrorText, embeddedOrigin, manageEmbedded, signOutEmbedded } from "./embedded";
 import { WalletPopup } from "./embedded-client";
@@ -121,7 +122,7 @@ function sodaxSwaps(sodax: Sodax): SodaxSwaps {
   return {
     isAllowanceValid: params => swaps.isAllowanceValid({ params, raw: true }),
     buildApproveTxs: params => swaps.buildApproveTxs({ params, raw: true }),
-    createIntent: (params, skipSimulation) => swaps.createIntent({ params, raw: true, skipSimulation }),
+    createIntent: (params, skipSimulation, partnerFee) => swaps.createIntent({ params, raw: true, skipSimulation, extras: { partnerFee } }),
     async relay(chainKey, srcTxHash, relayData) {
       const r = await relayTxAndWaitPacket({
         srcTxHash, data: relayData as never, chainKey: chainKey as SpokeChainKey,
@@ -142,8 +143,8 @@ function Bridge() {
   const accounts = useXAccounts();
   const providers = useProviders();
   const disconnect = useXDisconnect();
-  const live = useRef({ providers, accounts, origin: embeddedOrigin(config), trading: !!config?.tradingEnabled });
-  live.current = { providers, accounts, origin: embeddedOrigin(config), trading: !!config?.tradingEnabled };
+  const live = useRef({ providers, accounts, origin: embeddedOrigin(config), trading: !!config?.tradingEnabled, config });
+  live.current = { providers, accounts, origin: embeddedOrigin(config), trading: !!config?.tradingEnabled, config };
   const stocksOn = !!config?.stocksEnabled;
 
   useEffect(() => {
@@ -189,13 +190,18 @@ function Bridge() {
     const actions: WalletActions = {
       familyOf,
       async swap(input, onProgress) {
+        // This swap's fee, the one the review showed (lib/fees.ts). It comes from this server's config, so none is guessed
+        // before that config arrives.
+        const config = live.current.config;
+        if (!config) throw new Error("This server's settings haven't loaded yet. Try again in a moment.");
+        const partnerFee = swapFee(config, input.inputAmount, input.stockLeg).intent;
         const session = getWalletState().embedded;
         if (session) {
           try {
             const problem = embeddedSwapProblem(input, session.evm);
             if (problem) throw new EmbeddedTradeError(problem);
             const { popup, evm, signOnly } = openEmbedded(); // before the first await
-            return await embeddedSwap(sodaxSwaps(sodax), popup, input, evm, onProgress, { signOnly });
+            return await embeddedSwap(sodaxSwaps(sodax), popup, input, evm, onProgress, { signOnly, partnerFee });
           } catch (e) {
             const err = embeddedFailure(e);
             onProgress({ step: "failed", message: err.message });
@@ -220,7 +226,8 @@ function Bridge() {
           dstAddress,
           data: "0x" as const,
         };
-        const action = { params, walletProvider: src.provider } as never;
+        // swap and createLimitOrder pass extras on to createIntent; the allowance and the approval are for the whole amount.
+        const action = { params, walletProvider: src.provider, extras: { partnerFee } } as never;
         try {
           const allowed = unwrap(await sodax.swaps.isAllowanceValid(action));
           if (!allowed) { onProgress({ step: "approve" }); unwrap(await sodax.swaps.approve(action)); }
@@ -442,9 +449,8 @@ function ConnectSheet() {
 }
 
 export default function WalletRuntime() {
-  const { data: config } = useExclipConfig();
-  // Only the two fee fields matter: a config refetch must not rebuild the SDK.
-  const options = useMemo(() => sodaxOptions(config, window.location.origin) as SodaxOptions, [config?.feeReceiver, config?.partnerFeeBps]);
+  // Built once: each swap passes its own fee, so nothing in the config rebuilds the SDK.
+  const options = useMemo(() => sodaxOptions(window.location.origin) as SodaxOptions, []);
 
   return (
     <SodaxProvider config={options}>

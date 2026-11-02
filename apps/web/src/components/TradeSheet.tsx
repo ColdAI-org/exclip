@@ -8,7 +8,8 @@ import {
 } from "../lib/api";
 import { BRAND } from "../lib/brand";
 import { assetMeta, HUB_TX_URL, nameOf, networkMeta, QUOTE_SYMBOL } from "../lib/catalog";
-import { amount as fmtAmount, duration, fromUnits, pct, plain, toUnits, usd } from "../lib/format";
+import { amount as fmtAmount, duration, feeRate, fromUnits, plain, toUnits, usd } from "../lib/format";
+import { swapFee } from "../lib/fees";
 import { closeTrade, useUi, type TradeTab } from "../lib/ui";
 import { isConnected, requestWallet, useWallet, walletActions, type SwapProgress, type WalletState } from "../lib/wallet";
 import { addActivity, updateActivity, useActivity } from "../lib/activity";
@@ -110,9 +111,10 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
     return toUnits(plain(dollars / fromPrice, Math.min(fromToken.decimals, 8)), fromToken.decimals);
   }, [input, mode, fromToken, fromPrice]);
 
-  const feeBps = config?.partnerFeeBps ?? 0;
-  const feeUnits = units ? (units * BigInt(feeBps)) / 10_000n : 0n;
-  const netUnits = units ? units - feeUnits : null;
+  // The fee on this amount, as the intent will carry it (lib/fees.ts): a plain fee, a split's two shares, or on a swap
+  // with a stock in it only the operator's own fee.
+  const fee = useMemo(() => swapFee(config, units, stockLeg), [config, units, stockLeg]);
+  const netUnits = units ? units - fee.total : null;
 
   // Debounce typing before asking for a quote. The quote starts from the amount sold, as the intent does: the server
   // pins the fee on the quote and SODAX takes it off that amount, as the SDK's own getQuote does (docs/fee-split.md).
@@ -171,7 +173,7 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
         srcChainKey: fromToken.chainKey, dstChainKey: toToken.chainKey,
         inputToken: fromToken.address, outputToken: toToken.address,
         inputAmount: units, minOutputAmount: minOut, deadline, kind: "market",
-        dstAddress: recipient.trim() || undefined,
+        dstAddress: recipient.trim() || undefined, stockLeg,
       }, p => {
         setProgress(p);
         if (p.step === "submitted") {
@@ -231,7 +233,10 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
 
   const route = fromChain && toChain ? `${networkMeta(fromChain).short} → ${networkMeta(toChain).short}` : "—";
   const est = fromChain && toChain ? networkMeta(fromChain).confirmSeconds + HUB_SECONDS + networkMeta(toChain).confirmSeconds : null;
-  const feeUsd = fromPrice && fromToken ? Number(fromUnits(feeUnits, fromToken.decimals)) * fromPrice : null;
+  const feeAmount = (u: bigint) => {
+    const n = fromToken ? Number(fromUnits(u, fromToken.decimals)) : null;
+    return `${fmtAmount(n)} ${sides.from.symbol} · ${usd(n != null && fromPrice ? n * fromPrice : null)}`;
+  };
   const rate = inAmount && outAmount && netUnits && fromToken ? outAmount / Number(fromUnits(netUnits, fromToken.decimals)) : null;
   const quoteErr = quote.error instanceof Error ? quote.error.message : null;
 
@@ -245,7 +250,7 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
     const embeddedProblem = embedded && fromToken && toToken && minOut != null && units
       ? embeddedSwapProblem({
         srcChainKey: fromToken.chainKey, dstChainKey: toToken.chainKey, inputToken: fromToken.address, outputToken: toToken.address,
-        inputAmount: units, minOutputAmount: minOut, deadline: 1n, kind: "market", dstAddress: recipient.trim() || undefined,
+        inputAmount: units, minOutputAmount: minOut, deadline: 1n, kind: "market", dstAddress: recipient.trim() || undefined, stockLeg,
       }, embedded.evm)
       : null;
     const signOnly = !!embedded && devSignOnly();
@@ -272,8 +277,8 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
           <Row k="Rate" v={rate ? `1 ${sides.from.symbol} = ${fmtAmount(rate)} ${sides.to.symbol}` : "—"} />
           <Row k="Route" v={<span className="x-route"><NetworkBadge chainKey={fromChain ?? ""} /> {route} <NetworkBadge chainKey={toChain ?? ""} /></span>} />
           <Row k="Network fee" v="Paid in gas on the source network; your wallet shows it before you sign" />
-          {feeBps > 0
-            ? <Row k={`${BRAND.name} fee (${pct(feeBps / 100, { sign: false })})`} v={`${fmtAmount(fromToken ? Number(fromUnits(feeUnits, fromToken.decimals)) : null)} ${sides.from.symbol} · ${usd(feeUsd)}`} />
+          {fee.lines.length
+            ? fee.lines.map((line, i) => <Row key={i} k={`${line.party ?? BRAND.name} fee (${feeRate(line.rate)})`} v={feeAmount(line.amount)} />)
             : <Row k={`${BRAND.name} fee`} v="None" />}
           <Row k="SODAX fee" v="Included in the rate" />
           <Row k={`Minimum received (${slippage}% slippage)`} v={minOut != null && toToken ? `${fmtAmount(Number(fromUnits(minOut, toToken.decimals)))} ${sides.to.symbol}` : "—"} />
