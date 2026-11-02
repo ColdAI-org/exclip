@@ -8,14 +8,23 @@ import type { Plugin } from "vite";
 import {
   DEV_ORIGINS, PLACEHOLDER_ORIGINS, WALLET_CSP, resolveConfig, walletBuildConfig, walletSecurityHeaders, type ExclipConfigInput,
 } from "@exclip/config";
-import { parseFeeAllowList } from "@exclip/config/fee-split";
+import { EMPTY_FEE_ALLOW_LIST, parseFeeAllowList, type FeeAllowList } from "@exclip/config/fee-split";
 import { loadPublicConfig } from "@exclip/config/node";
-import { FEE_RECEIVERS_FILE, assertProductionOrigins, buildWarnings, parseFeeReceivers } from "../build-guards.ts";
+import { FEE_RECEIVERS_FILE, assertProductionOrigins, buildWarnings, feeSplitTerms, parseFeeReceivers } from "../build-guards.ts";
 import viteConfig, { brandIcon } from "../vite.config.ts";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-const configOf = (input: ExclipConfigInput) => resolveConfig(input).config;
+const configOf = (input: ExclipConfigInput, allowList?: FeeAllowList) => resolveConfig(input, {}, allowList).config;
 const OWN_ORIGINS = { app: "https://swap.example.org", wallet: "https://wallet.example.net" };
+
+// The local dry run's factory, as a reviewer lists it from the chain (contracts/fee-split/README.md), and the README's
+// split under it, whose splitter is 0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe.
+const DRY_RUN = (JSON.parse(read("../../../contracts/fee-split/test/vectors/splitters.json")) as {
+  factories: { address: string; platform: string; platformRate: number; maxTotalRate: number; initCodeHash: string }[];
+}).factories[0]!;
+const FACTORY = { address: DRY_RUN.address, platformName: "Platform", platform: DRY_RUN.platform, platformRate: DRY_RUN.platformRate, maxTotalRate: DRY_RUN.maxTotalRate, initCodeHash: DRY_RUN.initCodeHash };
+const SPLIT = { factory: DRY_RUN.address, operator: "0x" + "22".repeat(20), operatorRate: 100 };
+const allowList = (receivers: string[], splits: unknown[] = []) => parseFeeAllowList(JSON.stringify({ receivers, factories: [FACTORY], splits }));
 
 test("fee receivers come from the committed fee-receivers.json, never from the environment", () => {
   // The committed file parses; the build reads only it, and no environment variable at all.
@@ -36,28 +45,30 @@ test("fee receivers come from the committed fee-receivers.json, never from the e
 });
 
 test("the build stops on a fee-split factory or split the allow-list can't vouch for", () => {
-  // The local dry run's factory, as a reviewer lists it from the chain (contracts/fee-split/README.md).
-  const [dryRun] = (JSON.parse(read("../../../contracts/fee-split/test/vectors/splitters.json")) as {
-    factories: { address: string; platform: string; platformRate: number; maxTotalRate: number; initCodeHash: string }[];
-  }).factories;
-  assert.ok(dryRun);
-  const factory = { address: dryRun.address, platformName: "Platform", platform: dryRun.platform, platformRate: dryRun.platformRate, maxTotalRate: dryRun.maxTotalRate, initCodeHash: dryRun.initCodeHash };
-  const split = { factory: dryRun.address, operator: "0x" + "22".repeat(20), operatorRate: 100 };
   const receiver = "0x" + "33".repeat(20);
   const file = (factories: unknown[], splits: unknown[]) => JSON.stringify({ receivers: [receiver], factories, splits });
 
   // Listed properly, a split adds nothing to the plain-fee receivers.
-  assert.deepEqual(parseFeeReceivers(file([factory], [split])), [receiver]);
+  assert.deepEqual(parseFeeReceivers(file([FACTORY], [SPLIT])), [receiver]);
   for (const [factories, splits, why] of [
-    [[{ ...factory, initCodeHash: "0x" + "00".repeat(32) }], [], /initCodeHash/],
-    [[{ ...factory, platformRate: 1_876 }], [], /factories\[0\]/],
-    [[factory], [{ ...split, factory: "0x" + "44".repeat(20) }], /is not in "factories"/],
-    [[factory], [{ ...split, operator: dryRun.platform }], /\(OperatorIsPlatform\)/],
-    [[factory], [{ ...split, operatorRate: 1_001 }], /operatorRate/],
-    [[factory], [split, split], /listed twice/],
+    [[{ ...FACTORY, initCodeHash: "0x" + "00".repeat(32) }], [], /initCodeHash/],
+    [[{ ...FACTORY, platformRate: 1_876 }], [], /factories\[0\]/],
+    [[FACTORY], [{ ...SPLIT, factory: "0x" + "44".repeat(20) }], /is not in "factories"/],
+    [[FACTORY], [{ ...SPLIT, operator: DRY_RUN.platform }], /\(OperatorIsPlatform\)/],
+    [[FACTORY], [{ ...SPLIT, operatorRate: 1_001 }], /operatorRate/],
+    [[FACTORY], [SPLIT, SPLIT], /listed twice/],
   ] as const) {
     assert.throws(() => parseFeeReceivers(file([...factories], [...splits])), (e: unknown) => e instanceof Error && /^fee-receivers\.json: /.test(e.message) && why.test(e.message), why.source);
   }
+});
+
+test("the wallet gets each listed split with its factory's values and the platform's name, and works the splitter out itself", () => {
+  assert.deepEqual(feeSplitTerms(allowList([], [SPLIT])), [{
+    factory: DRY_RUN.address, platform: DRY_RUN.platform, platformName: "Platform", platformRate: 875, maxTotalRate: 1_875,
+    operator: SPLIT.operator, operatorRate: 100,
+  }]);
+  assert.deepEqual(feeSplitTerms(allowList([])), []);
+  assert.deepEqual(feeSplitTerms(EMPTY_FEE_ALLOW_LIST), []);
 });
 
 test("the repository ships an empty fee allowlist, so the wallet signs only fee-free intents", () => {
@@ -99,20 +110,47 @@ test("production build guard: exact https origins only, and at least one parent"
 });
 
 test("build warnings: the example origins (production only), and a partner fee whose receiver the wallet doesn't list", () => {
-  assert.match(buildWarnings(configOf({}), [], true).join("\n"), /origins are still the examples/);
-  assert.deepEqual(buildWarnings(configOf({}), [], false), [], "development uses DEV_ORIGINS");
-  assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS }), [], true), []);
+  const none = EMPTY_FEE_ALLOW_LIST;
+  const receiving = (receivers: string[]): FeeAllowList => ({ ...none, receivers });
+  assert.match(buildWarnings(configOf({}), none, true).join("\n"), /origins are still the examples/);
+  assert.deepEqual(buildWarnings(configOf({}), none, false), [], "development uses DEV_ORIGINS");
+  assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS }), none, true), []);
 
   const receiver = "0x" + "Cd".repeat(20);
   const fee = configOf({ origins: OWN_ORIGINS, fees: { partnerFeeBps: 30, receiver } });
   for (const production of [true, false]) {
-    assert.match(buildWarnings(fee, [], production).join("\n"), /the wallet will refuse every swap that carries a fee/);
-    assert.match(buildWarnings(fee, ["0x" + "ab".repeat(20)], production).join("\n"), /refuse every swap that carries a fee/);
+    assert.match(buildWarnings(fee, none, production).join("\n"), /the wallet will refuse every swap that carries a fee/);
+    assert.match(buildWarnings(fee, receiving(["0x" + "ab".repeat(20)]), production).join("\n"), /refuse every swap that carries a fee/);
   }
   // fee-receivers.json entries are lower case once parsed; the config's receiver may be checksummed.
-  assert.deepEqual(buildWarnings(fee, [receiver.toLowerCase()], true), []);
+  assert.deepEqual(buildWarnings(fee, receiving([receiver.toLowerCase()]), true), []);
   // A receiver without a fee: nothing to list.
-  assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS, fees: { partnerFeeBps: 0, receiver } }), [], true), []);
+  assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS, fees: { partnerFeeBps: 0, receiver } }), none, true), []);
+});
+
+test("build warnings: a fee split whose split the wallet doesn't list, and a stock-swap fee whose receiver it doesn't list", () => {
+  const factoryOnly = allowList([]);
+  const listed = allowList([], [SPLIT]);
+  const split = configOf({ origins: OWN_ORIGINS, fees: { split: SPLIT } }, factoryOnly);
+  assert.equal(split.fees.split?.splitter, "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe");
+  for (const production of [true, false]) {
+    assert.match(buildWarnings(split, factoryOnly, production).join("\n"), /0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe .*the wallet will refuse every swap that carries the split's fee/);
+  }
+  assert.deepEqual(buildWarnings(split, listed, true), []);
+  // The same operator at another rate is another split, with another splitter.
+  assert.match(buildWarnings(split, allowList([], [{ ...SPLIT, operatorRate: 101 }]), true).join("\n"), /refuse every swap that carries the split's fee/);
+
+  // With stocks on, a swap with a stock carries the operator's own plain fee instead, paid to its address: a receiver.
+  const stocks = { stocks: { enabled: true, countryHeader: "cf-ipcountry" } };
+  const stockFee = configOf({ origins: OWN_ORIGINS, fees: { split: { ...SPLIT, stockFeeBps: 25 } }, ...stocks }, factoryOnly);
+  assert.match(
+    buildWarnings(stockFee, listed, true).join("\n"),
+    /the fee on swaps with a tokenised stock goes to 0x2222222222222222222222222222222222222222, .*refuse every such swap that carries a fee/,
+  );
+  assert.deepEqual(buildWarnings(stockFee, allowList([SPLIT.operator], [SPLIT]), true), []);
+  // Stocks off, or no fee on stock swaps: nothing to list.
+  assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS, fees: { split: { ...SPLIT, stockFeeBps: 25 } } }, factoryOnly), listed, true), []);
+  assert.deepEqual(buildWarnings(configOf({ origins: OWN_ORIGINS, fees: { split: SPLIT }, ...stocks }, factoryOnly), listed, true), []);
 });
 
 test("what the wallet bakes in: the configured origins in production, DEV_ORIGINS in development", () => {
@@ -146,6 +184,7 @@ test("vite.config.ts: every define from exclip.config.ts or fee-receivers.json, 
     assert.deepEqual(Object.fromEntries(Object.entries(define).map(([k, v]) => [k, JSON.parse(v)])), {
       __EXCLIP_PARENT_ORIGINS__: wallet.parentOrigins,
       __EXCLIP_FEE_RECEIVERS__: parseFeeReceivers(readFileSync(FEE_RECEIVERS_FILE, "utf8")),
+      __EXCLIP_FEE_SPLITS__: feeSplitTerms(parseFeeAllowList(readFileSync(FEE_RECEIVERS_FILE, "utf8"))),
       __EXCLIP_DEV__: dev,
       __EXCLIP_WALLET_ORIGIN__: wallet.walletOrigin,
       __EXCLIP_BRAND_NAME__: wallet.brandName,

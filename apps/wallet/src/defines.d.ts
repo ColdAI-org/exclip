@@ -3,6 +3,10 @@
  * defined. */
 declare const __EXCLIP_PARENT_ORIGINS__: readonly string[];
 declare const __EXCLIP_FEE_RECEIVERS__: readonly string[];
+/** config.ts FeeSplitTerms. */
+declare const __EXCLIP_FEE_SPLITS__: readonly {
+  factory: string; platform: string; platformName: string; platformRate: number; maxTotalRate: number; operator: string; operatorRate: number;
+}[];
 declare const __EXCLIP_DEV__: boolean;
 declare const __EXCLIP_WALLET_ORIGIN__: string;
 declare const __EXCLIP_BRAND_NAME__: string;

@@ -5,7 +5,8 @@
  *    (origins.app), the wallet's own origin (origins.wallet), brand.name, brand.operator, wallet.unbackedLimitUsd and
  *    stocks.enabled.
  *    Development (vite serve) always uses DEV_ORIGINS: the app on http://localhost:5173, this on :5311.
- *  - Partner-fee receivers: fee-receivers.json (committed; no env).
+ *  - Where a partner fee may go: fee-receivers.json's plain receivers and fee splits (committed; no env). The build
+ *    stops on an entry it can't vouch for, such as a split its factory would refuse.
  * A production build refuses origins that aren't exact https origins or that let the app share the wallet's rpId
  * (build-guards.ts), and warns while the origins are still the examples. brand.logo becomes the window's tab icon.
  *
@@ -16,8 +17,9 @@ import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import { walletBuildConfig, walletSecurityHeaders } from "@exclip/config";
+import { parseFeeAllowList } from "@exclip/config/fee-split";
 import { loadPublicConfig } from "@exclip/config/node";
-import { FEE_RECEIVERS_FILE, assertProductionOrigins, buildWarnings, parseFeeReceivers } from "./build-guards.ts";
+import { FEE_RECEIVERS_FILE, assertProductionOrigins, buildWarnings, feeSplitTerms } from "./build-guards.ts";
 
 const DEV_PORT = 5311;
 /** The wallet origin's headers (packages/config/src/headers.ts): the same ones apps/server sends when it serves the
@@ -74,10 +76,10 @@ export default defineConfig(async ({ command, isPreview }) => {
   const dev = command === "serve";
   const config = await loadPublicConfig();
   const wallet = walletBuildConfig(config, dev);
-  const feeReceivers = parseFeeReceivers(readFileSync(FEE_RECEIVERS_FILE, "utf8"));
+  const allowList = parseFeeAllowList(readFileSync(FEE_RECEIVERS_FILE, "utf8"));
   if (command === "build") assertProductionOrigins(wallet.parentOrigins, wallet.walletOrigin);
   // Preview serves an existing build: its warnings were printed when it was built.
-  const warnings = isPreview ? [] : buildWarnings(config, feeReceivers, command === "build");
+  const warnings = isPreview ? [] : buildWarnings(config, allowList, command === "build");
   return {
     root: import.meta.dirname,
     base: "/",
@@ -85,7 +87,8 @@ export default defineConfig(async ({ command, isPreview }) => {
     envDir: false as const,
     define: {
       __EXCLIP_PARENT_ORIGINS__: JSON.stringify(wallet.parentOrigins),
-      __EXCLIP_FEE_RECEIVERS__: JSON.stringify(feeReceivers),
+      __EXCLIP_FEE_RECEIVERS__: JSON.stringify(allowList.receivers),
+      __EXCLIP_FEE_SPLITS__: JSON.stringify(feeSplitTerms(allowList)),
       __EXCLIP_DEV__: JSON.stringify(dev),
       __EXCLIP_WALLET_ORIGIN__: JSON.stringify(wallet.walletOrigin),
       __EXCLIP_BRAND_NAME__: JSON.stringify(wallet.brandName),

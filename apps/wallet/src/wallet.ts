@@ -23,7 +23,7 @@ import { attestStatus, defaultLocks, readStatus, updateStatus, type LockManagerL
 import {
   CeremonyPrf, createPasskey, getAssertion, type Asserted, type AuthenticationJson, type Challenge, type RegistrationJson, type WebAuthnEnv,
 } from "./webauthn.ts";
-import { BRAND_NAME, UNBACKED_LIMIT_USD, rpIdFor } from "./config.ts";
+import { BRAND_NAME, UNBACKED_LIMIT_USD, rpIdFor, type FeeSplitTerms } from "./config.ts";
 import { ApiError, type WalletApi } from "./api.ts";
 import { PolicyError, checkSignRequest, needsHubWallet, type Review } from "./sodax/policy.ts";
 import { EVM_ACCOUNT_ID, approvalHash, assemble, signingDigest } from "./evm.ts";
@@ -63,6 +63,8 @@ export type WalletDeps = {
   api: WalletApi;
   webauthn: WebAuthnEnv;
   feeReceivers: readonly string[];
+  /** The fee splits an intent's fee may go to (config.ts FEE_SPLITS). Absent: none, so no fee to a splitter is signed. */
+  feeSplits?: readonly FeeSplitTerms[];
   /** Time and the vault's auto-lock timers (vault systemClock in the browser; tests pass one without timers). */
   clock: Clock;
   /** Test hook: a cheaper Argon2id. Production uses password.ts argon2id with VAULT_ARGON2. */
@@ -264,6 +266,7 @@ export class EmbeddedWallet {
       accounts,
       hubWallet: hub?.address ?? null,
       feeReceivers: this.deps.feeReceivers,
+      feeSplits: this.deps.feeSplits ?? [],
       knownRecipients: status.recipients,
       nowSec: BigInt(Math.floor(this.deps.clock.now() / 1000)),
       walletOrigin: this.deps.webauthn.origin,
@@ -314,6 +317,7 @@ export class EmbeddedWallet {
           accounts,
           hubWallet: needsHub ? pinned ?? pin : null,
           feeReceivers: this.deps.feeReceivers,
+          feeSplits: this.deps.feeSplits ?? [],
           knownRecipients: status.recipients,
           nowSec: BigInt(Math.floor(this.deps.clock.now() / 1000)),
           walletOrigin: this.deps.webauthn.origin,

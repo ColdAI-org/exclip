@@ -510,6 +510,35 @@ test("tokenised stocks: refused unless the build switched them on; then reviewed
   for (const [i, raw] of signed.entries()) assert.equal(parseTransaction(raw).data?.toLowerCase(), request.txs[i]!.data.toLowerCase(), "signed as built");
 });
 
+test("a fee split: signed, exactly as built, only by a build that lists the split; the review and the re-check both use it", async () => {
+  const USDC_ETH = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+  const auth = new FakeAuthenticator();
+  const api = new FakeApi();
+  const sonic = new FakeSonic();
+  sonic.hub = HUB;
+  // The local dry run's factory and the README's split under it (contracts/fee-split/test/vectors/splitters.json).
+  const split = {
+    factory: "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519", platform: "0x1111111111111111111111111111111111111111", platformName: "Example Platform",
+    platformRate: 875, maxTotalRate: 1_875, operator: "0x2222222222222222222222222222222222222222", operatorRate: 100,
+  };
+  const listed = device(auth, api, new MemoryStorage(), { hubWallet: sonic.lookup, feeSplits: [split] });
+  const { accounts } = await listed.wallet.create();
+  // 1,000 USDC (Base) → USDC (Ethereum), with 9.75 USDC, 0.975 % of the amount sold, to the split's splitter.
+  const request = swapRequest({
+    src: "0x2105.base", dst: "ethereum", input: USDC_BASE, output: USDC_ETH, amount: 1_000_000_000n, min: 980_000_000n, approvals: [1_000_000_000n],
+    feeAmount: 9_750_000n, feeReceiver: "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe", own: accounts,
+  });
+  const prepared = await listed.wallet.prepareSign(request);
+  assert.match(prepared.review.lines.find((l) => l.label === "Fees")!.value, new RegExp(`^9\\.75 USDC · 0\\.875% to Example Platform · 0\\.1% to ${OPERATOR_NAME} · `));
+  const { signed } = await listed.wallet.sign(prepared);
+  assert.equal(signed.length, 2, "the exact approval, then the deposit");
+  for (const [i, raw] of signed.entries()) assert.equal(parseTransaction(raw).data?.toLowerCase(), request.txs[i]!.data.toLowerCase(), "signed as built");
+
+  // The same passkey and storage, in a build that lists no split: refused at the review.
+  const unlisted = device(auth, api, listed.storage, { hubWallet: sonic.lookup }).wallet;
+  await assert.rejects(unlisted.prepareSign(request), (e: unknown) => e instanceof PolicyError && e.detail === "fee receiver not allowlisted");
+});
+
 test("status record MAC: an edit made outside the wallet is reset at the next unlock, and that signature is refused", async () => {
   const d = device(new FakeAuthenticator(), new FakeApi());
   const { accounts } = await d.wallet.create();

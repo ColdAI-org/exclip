@@ -9,6 +9,15 @@ export const PARENT_ORIGINS: readonly string[] = Object.freeze(typeof __EXCLIP_P
 export const FEE_RECEIVERS: readonly string[] = Object.freeze(
   typeof __EXCLIP_FEE_RECEIVERS__ === "undefined" ? [] : __EXCLIP_FEE_RECEIVERS__.map((a) => a.toLowerCase()),
 );
+/** A fee split fee-receivers.json lists, with its factory's values (build-guards.ts feeSplitTerms). No splitter
+ * address: the policy works it out from these itself, and names the platform by `platformName`. */
+export type FeeSplitTerms = {
+  factory: string; platform: string; platformName: string; platformRate: number; maxTotalRate: number; operator: string; operatorRate: number;
+};
+/** Fee splits whose splitter an intent's fee may go to. Empty: no fee to a splitter is signed. */
+export const FEE_SPLITS: readonly FeeSplitTerms[] = Object.freeze(
+  typeof __EXCLIP_FEE_SPLITS__ === "undefined" ? [] : __EXCLIP_FEE_SPLITS__.map((s) => Object.freeze({ ...s })),
+);
 /** Dev build (vite serve): allows http://localhost. */
 export const DEV: boolean = typeof __EXCLIP_DEV__ === "undefined" ? false : __EXCLIP_DEV__;
 /** The origin this build is configured to be served from (exclip.config.ts origins.wallet). Only for what the screens

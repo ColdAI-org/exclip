@@ -11,7 +11,9 @@
  *    contract that this trade uses;
  *  - a swap between USD stablecoins pays out at least 97% of what goes in (price.ts; other pairs are checked against
  *    the popup's own quote in wallet.ts);
- *  - the partner fee is at most MAX_PARTNER_FEE_BPS to a build-time allowlisted receiver (fee-receivers.json);
+ *  - the partner fee goes to a build-time allowlisted receiver and is at most MAX_PARTNER_FEE_BPS, or goes to the
+ *    splitter of a build-time allowlisted fee split, which this module works out itself, and is exactly the split's
+ *    rates of the amount paid, on a swap with no tokenised stock on either side (fee-receivers.json, docs/fee-split.md);
  *  - nonces are consecutive and the gas/fee numbers are sane, with the fee capped per network. The chain id comes
  *    from EVM_CHAINS, never the request.
  * Anything else is refused. The review screen is built only from what this module decoded, and shows the nonce and a
@@ -19,11 +21,12 @@
  * build that switches tokenised stocks on (PolicyContext.stocks), one in stock-tokens.ts; the review marks a stock with
  * the stock badge and carries the stocks disclaimer (docs/tokenised-stocks.md). */
 import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, encodeFunctionData, formatUnits, getAddress, parseAbi, parseAbiParameters, type Hex } from "viem";
+import { RATE_SCALE, formatRate, predictSplitter, splitFee } from "@exclip/config/fee-split";
 import { STOCK_BADGE, stocksDisclaimer } from "@exclip/config/stocks";
 import type { SignRequest, SwapPlan, TransferPlan, UnsignedTx } from "../protocol.ts";
 import { base58Decode } from "../base58.ts";
 import { fromHex, toHex } from "../bytes.ts";
-import { OPERATOR_NAME } from "../config.ts";
+import { OPERATOR_NAME, type FeeSplitTerms } from "../config.ts";
 import { INTENTS_CONTRACT, MAX_PARTNER_FEE_BPS, NATIVE_TOKEN, SONIC_KEY, SONIC_WALLET_ROUTER, destination, evmChain, type EvmChain } from "./chains.ts";
 import { SODAX_TOKENS } from "./tokens.ts";
 import { SODAX_STOCK_TOKENS } from "./stock-tokens.ts";
@@ -75,6 +78,8 @@ export type PolicyContext = {
   hubWallet: string | null;
   /** Partner-fee receivers an intent may name (lower-case). */
   feeReceivers: readonly string[];
+  /** Fee splits whose splitter an intent may name (config.ts FEE_SPLITS). The splitters are worked out here. */
+  feeSplits: readonly FeeSplitTerms[];
   /** EVM recipients sent to before (lower-case). */
   knownRecipients: readonly string[];
   nowSec: bigint;
@@ -133,6 +138,9 @@ export function findToken(chainKey: string, address: string, stocks = false): To
   const stock = lookUp(SODAX_STOCK_TOKENS, chainKey, address);
   return stock && { ...stock, stock: true };
 }
+
+/** A tokenised stock by the wallet's own table (stock-tokens.ts), whether or not this build lists stocks. */
+const isStock = (chainKey: string, address: string) => lookUp(SODAX_STOCK_TOKENS, chainKey, address) !== null;
 
 /** Every listed token contract on `chainKey`, the tokenised stocks included with `stocks`. */
 const tokenContracts = (chainKey: string, stocks: boolean): string[] =>
@@ -231,15 +239,38 @@ function ownDestinationBytes(family: "evm" | "solana" | "sui", ctx: PolicyContex
   return b;
 }
 
+/** The splitter a listed split's factory creates for its operator and rate, worked out here as the factory does
+ * (@exclip/config/fee-split predictSplitter), or null for a split the factory would refuse: the build stops on one,
+ * and nothing is signed for it. */
+function splitterOf(split: FeeSplitTerms): string | null {
+  const { factory, platform, platformRate, maxTotalRate, operator, operatorRate } = split;
+  try {
+    return predictSplitter({ address: factory, platform, platformRate, maxTotalRate }, operator, operatorRate);
+  } catch {
+    return null;
+  }
+}
+
 /** "0x" or the single FEE envelope 0x01 ‖ abi.encode(uint256 fee, address receiver). Anything else (ARRAY, DELIVERY
- * hooks, unknown types) is refused: it could route the output somewhere the review doesn't show. */
-function partnerFee(data: Hex, ctx: PolicyContext): { fee: bigint; receiver: string | null } {
-  if (data === "0x") return { fee: 0n, receiver: null };
+ * hooks, unknown types) is refused: it could route the output somewhere the review doesn't show. The receiver is the
+ * splitter of a listed fee split (`split`), or a listed plain receiver. A splitter is looked for first, so its fee is
+ * held to the split's rates whatever else lists it. */
+function partnerFee(data: Hex, ctx: PolicyContext): { fee: bigint; receiver: string | null; split: FeeSplitTerms | null } {
+  if (data === "0x") return { fee: 0n, receiver: null, split: null };
   check(data.length === 4 + 128 && data.startsWith("0x01"), "intent data is not a plain fee");
   const [fee, receiver] = decodeAbiParameters(FEE_DATA, `0x${data.slice(4)}`);
   check(lower(encodeAbiParameters(FEE_DATA, [fee, receiver])) === lower(`0x${data.slice(4)}`), "fee data: non-canonical");
-  check(ctx.feeReceivers.includes(lower(receiver)), "fee receiver not allowlisted");
-  return { fee, receiver };
+  const split = ctx.feeSplits.find((s) => splitterOf(s)?.toLowerCase() === lower(receiver)) ?? null;
+  check(split !== null || ctx.feeReceivers.includes(lower(receiver)), "fee receiver not allowlisted");
+  return { fee, receiver, split };
+}
+
+/** The partner fee's part of the review's Fees line. A split's says who gets which rate: the platform by its name in
+ * the allow-list, the operator by this build's (config.ts OPERATOR_NAME). A party at 0 is left out. */
+function partnerFeeParts(fee: bigint, input: Token, split: FeeSplitTerms | null): string[] {
+  if (!split) return fee > 0n ? [`${OPERATOR_NAME} fee ${amount(fee, input)}`] : [];
+  const shares: [number, string][] = [[split.platformRate, split.platformName], [split.operatorRate, OPERATOR_NAME]];
+  return [amount(fee, input), ...shares.filter(([rate]) => rate > 0).map(([rate, name]) => `${formatRate(rate)}% to ${name}`)];
 }
 
 /* ------------------------------------------------------------------ swaps */
@@ -251,10 +282,19 @@ function checkIntent(intent: Intent, plan: SwapPlan, chain: EvmChain, ctx: Polic
   const isSonic = chain.key === SONIC_KEY;
   check(sameAddress(intent.inputToken, isSonic ? input.address : input.hubAsset), "intent input token");
   check(sameAddress(intent.outputToken, plan.dstChainKey === SONIC_KEY ? output.address : output.hubAsset), "intent output token");
-  const { fee, receiver } = partnerFee(intent.data, ctx);
+  const { fee, receiver, split } = partnerFee(intent.data, ctx);
   const gross = uint(plan.inputAmount);
   check(gross > 0n && intent.inputAmount + fee === gross, "intent amount");
-  check(fee * 10_000n <= gross * MAX_PARTNER_FEE_BPS, "partner fee above the cap");
+  if (split) {
+    // A fee split (docs/fee-split.md): never on a swap with a tokenised stock on either side, the operator's rate
+    // within the wallet's cap, and exactly the split's rates of the amount paid, rounded down, so the rates on the
+    // review are the rates charged. The total may reach the factory's listed cap.
+    check(!isStock(chain.key, input.address) && !isStock(plan.dstChainKey, output.address), "fee split on a swap with a tokenised stock");
+    check(BigInt(split.operatorRate) * 10_000n <= MAX_PARTNER_FEE_BPS * BigInt(RATE_SCALE), "operator's rate above the cap");
+    check(fee === splitFee(gross, split.platformRate + split.operatorRate), "fee is not exactly the split's rates");
+  } else {
+    check(fee * 10_000n <= gross * MAX_PARTNER_FEE_BPS, "partner fee above the cap");
+  }
   check(intent.minOutputAmount === uint(plan.minOutputAmount) && intent.minOutputAmount > 0n, "minimum received");
   check(intent.deadline === uint(plan.deadline), "deadline");
   check(intent.deadline > ctx.nowSec && intent.deadline <= ctx.nowSec + MAX_DEADLINE_SEC, "deadline out of range");
@@ -263,7 +303,7 @@ function checkIntent(intent: Intent, plan: SwapPlan, chain: EvmChain, ctx: Polic
   check(lower(intent.srcAddress) === lower(ctx.accounts.evm), "intent source address");
   check(lower(intent.dstAddress) === lower(toHex(ownDestinationBytes(dst.family, ctx))), "intent destination is not this wallet");
   check(sameAddress(intent.solver, NATIVE_TOKEN), "intent names a solver");
-  return { fee, receiver };
+  return { fee, receiver, split };
 }
 
 function checkSwap(req: SignRequest, plan: SwapPlan, chain: EvmChain, ctx: PolicyContext): Review {
@@ -320,7 +360,7 @@ function checkSwap(req: SignRequest, plan: SwapPlan, chain: EvmChain, ctx: Polic
     check(sameAddress(createCall[0], INTENTS_CONTRACT) && createCall[1] === 0n, "hub createIntent target");
     [intent] = decodeExact(INTENTS_ABI, createCall[2], "createIntent") as [Intent];
   }
-  const { fee, receiver } = checkIntent(intent, plan, chain, ctx, input!, output!, dst);
+  const { fee, receiver, split } = checkIntent(intent, plan, chain, ctx, input!, output!, dst);
   const swap: SwapFacts = { input: input!, output: output!, gross, net: intent.inputAmount, minOut: intent.minOutputAmount };
   if (stableMinimumTooLow(swap)) throw new PolicyError("REFUSED", STABLE_FLOOR_MESSAGE, "stable minimum below the floor");
   checked.push(toChecked(swapTx, chain, `Swap ${amount(gross, input!)} for at least ${amount(intent.minOutputAmount, output!)}`));
@@ -334,8 +374,8 @@ function checkSwap(req: SignRequest, plan: SwapPlan, chain: EvmChain, ctx: Polic
     { label: "Your SODAX account on Sonic", value: getAddress(lower(ctx.hubWallet!)), mono: true },
   ];
   if (approvals.length) lines.push({ label: "Spender (exact amount)", value: `${getAddress(lower(spender))} · SODAX`, mono: true });
-  lines.push({ label: "Fees", value: `${fee > 0n ? `${OPERATOR_NAME} fee ${amount(fee, input!)} · ` : ""}network ${networkFee(checked, chain)}` });
-  if (receiver) lines.push({ label: "Fee receiver", value: getAddress(receiver), mono: true });
+  lines.push({ label: "Fees", value: [...partnerFeeParts(fee, input!, split), `network ${networkFee(checked, chain)}`].join(" · ") });
+  if (receiver) lines.push({ label: "Fee receiver", value: split ? `${getAddress(receiver)} · fee splitter` : getAddress(receiver), mono: true });
   lines.push(nonceLine(checked));
   lines.push({ label: "Signing from", value: ctx.walletOrigin });
   const warning = feeWarning(checked, chain, input!, gross, "pay");

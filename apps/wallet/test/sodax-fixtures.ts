@@ -23,7 +23,7 @@ export const HUB = "0x2222222222222222222222222222222222222222";
 export const FEE_RECEIVER = "0x3333333333333333333333333333333333333333";
 
 export const ctx = (over: Partial<PolicyContext> = {}): PolicyContext => ({
-  accounts: OWN, hubWallet: HUB, feeReceivers: [FEE_RECEIVER], knownRecipients: [], nowSec: NOW, walletOrigin: "https://wallet.test", ...over,
+  accounts: OWN, hubWallet: HUB, feeReceivers: [FEE_RECEIVER], feeSplits: [], knownRecipients: [], nowSec: NOW, walletOrigin: "https://wallet.test", ...over,
 });
 
 // 1 gwei: within every network's cap (the ETH rollups allow 10 gwei).
@@ -32,7 +32,8 @@ export const tx = (to: string, data: Hex, value = 0n, nonce = 7): UnsignedTx => 
 
 export type SwapSpec = {
   src: string; dst: string; input: string; output: string; amount: bigint; min: bigint;
-  feeBps?: bigint; feeReceiver?: string; dstAddress?: string; approvals?: bigint[];
+  /** The partner fee, in basis points of `amount`, or as an amount (a fee split's), to `feeReceiver`. */
+  feeBps?: bigint; feeAmount?: bigint; feeReceiver?: string; dstAddress?: string; approvals?: bigint[];
   /** The signing wallet's addresses (default OWN); a wallet test passes its own so the swap can be signed. */
   own?: { evm: string; solana: string; sui: string };
 };
@@ -48,8 +49,8 @@ function dstBytes(dst: string, address: string): Hex {
 export function buildIntent(s: SwapSpec): Intent {
   const src = EVM_CHAINS[s.src]!;
   const input = findToken(s.src, s.input, true)!, output = findToken(s.dst, s.output, true)!;
-  const feeAmount = s.feeBps ? (s.amount * s.feeBps) / 10_000n : 0n;
-  const data: Hex = s.feeBps
+  const feeAmount = s.feeAmount ?? (s.feeBps ? (s.amount * s.feeBps) / 10_000n : 0n);
+  const data: Hex = s.feeAmount !== undefined || s.feeBps
     ? encodePacked(["uint8", "bytes"], [1, encodeAbiParameters(parseAbiParameters("uint256 fee, address receiver"), [feeAmount, (s.feeReceiver ?? FEE_RECEIVER) as Hex])])
     : "0x";
   const dstRelay = s.dst === "solana" ? 1n : s.dst === "sui" ? 21n : EVM_CHAINS[s.dst]!.relayId;
