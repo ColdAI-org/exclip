@@ -69,10 +69,10 @@ intent's `data` (`sdk:25251-25284`; the type numbers are at
 the fee to the partner address" (`sdk:25238`).
 
 ExClip uses the percentage form today. The config allows whole basis
-points from 0 to 100 (`packages/config/src/index.ts:122` and `:302`), and
+points from 0 to 100 (`packages/config/src/index.ts:148` and `:334`), and
 the server pins `{ address, percentage }` on every route that carries a fee
-(`packages/config/src/index.ts:351`,
-`apps/server/src/services/sodaxProxy.ts:97-101` and `:187`).
+(`packages/config/src/index.ts:422`,
+`apps/server/src/services/sodaxProxy.ts:99-103` and `:191`).
 
 ### Where the fee goes, and in which token
 
@@ -84,10 +84,10 @@ the server pins `{ address, percentage }` on every route that carries a fee
   from another chain, that is the token's hub asset: the ERC-20 that stands
   for it on Sonic (`sdk:25197`). For a swap from Sonic, it is the Sonic
   token itself, and native S is `0x0000…0000` (`sdk:25658-25701`). ExClip's
-  wallet checks the same thing (`apps/wallet/src/sodax/policy.ts:225`).
+  wallet checks the same thing (`apps/wallet/src/sodax/policy.ts:252`).
   The amounts are in the same smallest units as the token sold: the wallet
   checks that the intent's amount plus the fee equals the amount the user
-  pays (`policy.ts:229`).
+  pays (`policy.ts:256`).
 - **As a plain balance.** The fee lands as an ordinary balance of the
   receiver's address. SODAX's fee tools read a partner's fees with ERC-20
   `balanceOf(partner)` over every hub asset (`sdk:43807-43843`), and tell a
@@ -100,7 +100,7 @@ the server pins `{ address, percentage }` on every route that carries a fee
 Native S needs care. For a swap that sells native S from Sonic, the SDK
 sends the whole amount, fee included, as the transaction's value
 (`sdk:25700`), and ExClip's wallet allows such swaps
-(`policy.ts:252` and `:271-273`). How the intents contract then passes the
+(`policy.ts:279` and `:298-300`). How the intents contract then passes the
 fee on in native S isn't visible here. The ABI in the SDK even lists
 `createIntent` as `nonpayable` (`sdk:12065-12148`). A receiver that may get
 native S should accept it however it is sent, including Solidity's
@@ -366,35 +366,35 @@ exist before the first release, and anyone can create it.
 ### The server
 
 - **It pins the amount.** On the five routes that carry a fee
-  (`apps/server/src/services/sodaxProxy.ts:34` and `:38-41`), it drops the
-  browser's fee as it does today (`:97-101`), and pins
+  (`apps/server/src/services/sodaxProxy.ts:36` and `:40-43`), it drops the
+  browser's fee as it does today (`:99-103`), and pins
   `{ address: splitter, amount }`.
   It works the amount out from the request: `inputAmount` on the intent
   routes, `amount` on the quote (`types`
   `backend/backendApiV2.d.ts:214-231` and `:254-270`). It sends no
   percentage. When both forms are present, SODAX uses the amount (`:14`).
 - **It quotes from the same number.** Today the app asks for a quote on the
-  amount after the fee (`apps/web/src/components/TradeSheet.tsx:103-117`),
+  amount after the fee (`apps/web/src/components/TradeSheet.tsx:113-127`),
   and the server pins the fee on that quote as well. If SODAX takes a
   pinned fee off a quote's `amount`, as the SDK's own `getQuote` does
   (`sdk:30627-30633`), the quote counts the fee twice and comes out a
   little low. With the split, the app should quote the amount sold, so
   that the quote, the fee and the intent all start from the same number.
 - **It publishes the split.** `/config` publishes `partnerFeeBps` and
-  `feeReceiver` today (`apps/server/src/services/config.ts:61-62`). With
+  `feeReceiver` today (`apps/server/src/services/config.ts:82-83`). With
   the split, it publishes the receiver, each party's name and rate per
   100,000, and the fee on stock swaps.
 
 ### The app
 
 - **It passes the fee with each swap.** Today it gives the SDK one
-  percentage for every swap (`apps/web/src/lib/api.ts:114-118`). With the
+  percentage for every swap (`apps/web/src/lib/api.ts:122-126`). With the
   split, it passes `{ address: splitter, amount }` to each `createIntent`.
   The SDK takes a fee per call (`extras.partnerFee`, `sdk:31303-31305`),
   and uses an amount as given (`sdk:25257-25258`).
 - **It shows the split.** Today the review has one fee row
-  (`TradeSheet.tsx:245-247`), and works the fee out in basis points
-  (`:103-105`). With the split, it works the fee out per 100,000, and shows
+  (`TradeSheet.tsx:274-276`), and works the fee out in basis points
+  (`:113-115`). With the split, it works the fee out per 100,000, and shows
   two rows, such as "ColdAI fee (0.875 %)" and "Acme Swap fee (0.1 %)",
   each with its amount.
 
@@ -415,14 +415,14 @@ nothing the app sends:
 - **It checks the fee exactly.** A fee to a splitter must be the total rate
   of the amount sold, rounded down: in the example above, exactly
   9,750,000 units. Today's check is "at most 1 %"
-  (`apps/wallet/src/sodax/policy.ts:230`). An exact check means that the
+  (`apps/wallet/src/sodax/policy.ts:257`). An exact check means that the
   rates on the review are the rates charged. The wallet's own cap
   (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:87`) is 1 %
   today. With the split it limits the operator's rate, while the total of
   a split may reach the factory's cap, 1.875 %
   ([the cap](#decisions-for-the-owner)).
 - **It shows who gets what.** Today the review names one fee, the
-  operator's, and shows the receiver's address (`policy.ts:310-311`). With
+  operator's, and shows the receiver's address (`policy.ts:337-338`). With
   the split it says, for example,
   "9.75 USDC · 0.875 % to ColdAI · 0.1 % to Acme Swap", and names the
   receiver as the fee splitter. The platform's name comes from the
@@ -464,19 +464,23 @@ Swaps of tokenised stocks, the tokens SODAX flags `isRwa`, carry no
 platform fee. This design counts a swap as one when either side is a stock
 ([decisions](#decisions-for-the-owner)).
 
-None is offered today. The server refuses a request with a stock on either
-side (`sodaxProxy.ts:190-199`), the app leaves stocks out
-(`TradeSheet.tsx:58`), and so does the wallet's token list
-(`apps/wallet/scripts/gen-sodax-tokens.ts:23`). If stocks are offered:
+Stocks are an operator opt-in that ships off
+([tokenised stocks](tokenised-stocks.md)). The server sends a request with
+a stock on either side to SODAX only when its stock check passes it, and
+refuses it with a 451 otherwise (`sodaxProxy.ts:194-204`). The app lists
+stocks only when the server offers them (`TradeSheet.tsx:59-62`), and the
+wallet signs them only in a build with stocks on, from its own table
+(`apps/wallet/src/sodax/stock-tokens.ts`, `apps/wallet/src/config.ts:30-31`).
+When a DEX offers stocks and also uses the split:
 
 - **The server** already tells which requests have a stock leg, from
-  SODAX's token list (`sodaxProxy.ts:60-68` and `:153-168`). For those it
+  SODAX's token list (`sodaxProxy.ts:62-70` and `:155-170`). For those it
   pins the operator's own fee, paid straight to the operator's address, or
   no fee at all. Never the splitter: a splitter gives the platform its
   share of whatever reaches it.
-- **The wallet** tells stocks from its own reviewed token list, never from
-  the request. That list then has to include stocks, marked as such. The
-  wallet refuses a split on a swap with a stock on either side.
+- **The wallet** tells stocks from its own reviewed table, never from the
+  request: `stock-tokens.ts` already marks them. It refuses a split on a
+  swap with a stock on either side.
 - **The app** shows only the operator's fee on those swaps, or "None".
 
 ### Documents to change
@@ -517,7 +521,7 @@ deciding them.
    cap is 1,875 per 100,000. A factory's cap can't change, which is why it
    had to be settled before the factory is deployed. Two limits are still
    1 % on the whole fee: the config's (`PARTNER_FEE_MAX_BPS`,
-   `packages/config/src/index.ts:122`) and the wallet's
+   `packages/config/src/index.ts:148`) and the wallet's
    (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:87`). When the
    split is built, each limits the operator's rate instead, and a split's
    total may reach 1.875 %. Changing the wallet's limit needs an issue and
