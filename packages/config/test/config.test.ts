@@ -8,6 +8,7 @@ import { EMPTY_FEE_ALLOW_LIST, parseFeeAllowList } from "../src/fee-split.ts";
 import {
   ConfigError,
   DEV_ORIGINS,
+  FEE_RATE_MAX,
   ISO_COUNTRY_CODES,
   PARTNER_FEE_MAX_BPS,
   PLACEHOLDER_ORIGINS,
@@ -45,6 +46,9 @@ const ALLOW_LIST_JSON = JSON.stringify({ receivers: [], factories: VECTOR_FACTOR
 const ALLOW_LIST = parseFeeAllowList(ALLOW_LIST_JSON);
 const [DRY_RUN, , NO_PLATFORM_FEE, NO_ROOM] = ALLOW_LIST.factories.map((f) => f.address) as [string, string, string, string];
 const SPLIT = { factory: DRY_RUN, operator: OPERATOR, operatorRate: 100 };
+/** The refusals of a second kind of fee. */
+const SPLIT_AND_PLAIN = "fees.split can't be set with fees.partnerFeeBps, fees.rate, fees.receiver or fees.receiverName: a config sets a plain fee or a split, never both";
+const STOCK_FEE_WITHOUT_RATE = "fees.stockFeeBps can be set only with fees.rate above 0: fees.partnerFeeBps is charged on every swap, stocks included, and a split has fees.split.stockFeeBps";
 const SECRET = "sodax-test-key-must-never-leave-the-server";
 /** Stocks switched on as the documentation shows, and the two secrets the server then needs. */
 const STOCKS_ON = { enabled: true, countryHeader: "cf-ipcountry" } as const;
@@ -71,8 +75,11 @@ function configDir(source: string): string {
 test("defaults: no partner fee, nothing pinned, no key, the ExClip brand and the placeholder origins", () => {
   const { config, secrets } = resolveConfig();
   assert.equal(config.fees.partnerFeeBps, 0);
+  assert.equal(config.fees.rate, 0);
   assert.equal(config.fees.receiver, null);
+  assert.equal(config.fees.receiverName, "ExClip");
   assert.equal(config.fees.partnerFee, null);
+  assert.equal(config.fees.rateFee, null);
   assert.equal(config.brand.name, "ExClip");
   assert.deepEqual(config.origins, { ...PLACEHOLDER_ORIGINS });
   assert.equal(usesPlaceholderOrigins(config), true);
@@ -185,6 +192,73 @@ test("a receiver without a rate pins nothing", () => {
   const { config } = resolveConfig({ fees: { receiver: RECEIVER } });
   assert.equal(config.fees.receiver, RECEIVER);
   assert.equal(config.fees.partnerFee, null);
+  assert.equal(config.fees.rateFee, null);
+});
+
+test("fee rate: a whole number per 100,000 of the amount sold up to 1 %, only with a receiver, never with partnerFeeBps", () => {
+  const { config } = resolveConfig({ fees: { rate: 875, receiver: RECEIVER } });
+  assert.deepEqual(config.fees.rateFee, { address: RECEIVER, rate: 875, stockFee: null });
+  assert.equal(config.fees.rate, 875);
+  assert.equal(config.fees.partnerFee, null, "nothing in basis points");
+  assert.equal(FEE_RATE_MAX, 1_000);
+  for (const rate of [1, 1_000]) assert.equal(resolveConfig({ fees: { rate, receiver: RECEIVER } }).config.fees.rateFee?.rate, rate);
+  for (const bad of [-1, 2.5, 1_001, Number.NaN, Number.POSITIVE_INFINITY, "875", null]) {
+    assert.deepEqual(problemsOf({ fees: { rate: bad, receiver: RECEIVER } }), ["fees.rate must be a whole number from 0 to 1000"], String(bad));
+  }
+  // 0 is no fee, and the example's partnerFeeBps 0 isn't a fee in basis points.
+  assert.equal(resolveConfig({ fees: { rate: 0, receiver: RECEIVER } }).config.fees.rateFee, null);
+  assert.equal(resolveConfig({ fees: { partnerFeeBps: 0, rate: 875, receiver: RECEIVER } }).config.fees.rateFee?.rate, 875);
+  assert.deepEqual(problemsOf({ fees: { rate: 875 } }), ["fees.receiver is required when fees.rate is above 0"]);
+  assert.deepEqual(problemsOf({ fees: { rate: 875, receiver: null } }), ["fees.receiver is required when fees.rate is above 0"]);
+  assert.match(problemsOf({ fees: { rate: 875, receiver: "0x1234" } })[0]!, /fees.receiver must be an EVM address/);
+  // One plain fee: in basis points or as a rate.
+  assert.deepEqual(problemsOf({ fees: { partnerFeeBps: 10, rate: 100, receiver: RECEIVER } }), [
+    "fees.partnerFeeBps and fees.rate can't both be set: a plain fee is given in basis points or as a rate, never both",
+  ]);
+});
+
+test("fee rate: its own fee on stock swaps, in basis points to the same receiver, and only with a rate", () => {
+  const { config } = resolveConfig({ fees: { rate: 875, stockFeeBps: 25, receiver: RECEIVER } });
+  assert.deepEqual(config.fees.rateFee, { address: RECEIVER, rate: 875, stockFee: { address: RECEIVER, percentage: 25 } });
+  assert.equal(resolveConfig({ fees: { rate: 875, stockFeeBps: 100, receiver: RECEIVER } }).config.fees.rateFee?.stockFee?.percentage, 100);
+  assert.equal(resolveConfig({ fees: { rate: 875, stockFeeBps: 0, receiver: RECEIVER } }).config.fees.rateFee?.stockFee, null);
+  for (const bad of [-1, 2.5, 101, "25", null]) {
+    assert.deepEqual(problemsOf({ fees: { rate: 875, stockFeeBps: bad, receiver: RECEIVER } }), ["fees.stockFeeBps must be a whole number from 0 to 100"], String(bad));
+  }
+  // partnerFeeBps stays the same fee on every swap, stocks included, and a split has a stock fee of its own.
+  assert.deepEqual(problemsOf({ fees: { partnerFeeBps: 30, stockFeeBps: 25, receiver: RECEIVER } }), [STOCK_FEE_WITHOUT_RATE]);
+  assert.deepEqual(problemsOf({ fees: { stockFeeBps: 25, receiver: RECEIVER } }), [STOCK_FEE_WITHOUT_RATE]);
+  assert.deepEqual(problemsOf({ fees: { stockFeeBps: 25, split: SPLIT } }, {}, ALLOW_LIST), [STOCK_FEE_WITHOUT_RATE]);
+  assert.deepEqual(resolveConfig({ fees: { partnerFeeBps: 30, stockFeeBps: 0, receiver: RECEIVER } }).config.fees.partnerFee, { address: RECEIVER, percentage: 30 });
+});
+
+test("the fee's receiver name: brand.name by default, plain text like a platform's name, with either plain fee", () => {
+  const nameOf = (input: ExclipConfigInput) => resolveConfig(input).config.fees.receiverName;
+  assert.equal(nameOf({ brand: { name: "Swapper" }, fees: { rate: 875, receiver: RECEIVER } }), "Swapper");
+  assert.equal(nameOf({ brand: { name: "Swapper" }, fees: { rate: 875, receiver: RECEIVER, receiverName: "Example Ltd" } }), "Example Ltd");
+  assert.equal(nameOf({ fees: { partnerFeeBps: 30, receiver: RECEIVER, receiverName: "Example Ltd" } }), "Example Ltd");
+  // It may sit ready while no fee is charged.
+  assert.equal(nameOf({ fees: { receiverName: "x".repeat(40) } }), "x".repeat(40));
+  for (const bad of ["", " Example Ltd", "Example Ltd ", "x".repeat(41), "<b>Example</b>", "Example\nLtd", "Example\tLtd", 7, null]) {
+    assert.deepEqual(
+      problemsOf({ fees: { rate: 875, receiver: RECEIVER, receiverName: bad } }),
+      ["fees.receiverName must be plain text of 1 to 40 characters, with no space at either end"],
+      JSON.stringify(bad),
+    );
+  }
+});
+
+test("the example's commented fee rate is valid once uncommented, with a receiver set", async () => {
+  const source = readFileSync(new URL("../../../exclip.config.example.ts", import.meta.url), "utf8");
+  const block = source.match(/^ *\/\/ {3}rate: .*\n(?: *\/\/ {3}\w+: .*\n)+/m)?.[0];
+  assert.ok(block, "the example shows a fee rate");
+  const module = `export default { ${block.replace(/^ *\/\/ {3}/gm, "")} };`;
+  const { default: rate } = (await import(`data:text/javascript,${encodeURIComponent(module)}`)) as { default: ExclipConfigInput["fees"] };
+  // In place, next to the example's partnerFeeBps 0, with the receiver the comment asks for.
+  const { config } = resolveConfig({ fees: { ...example.fees, ...rate, receiver: RECEIVER } });
+  assert.deepEqual(config.fees.rateFee, { address: RECEIVER, rate: 875, stockFee: null });
+  assert.equal(config.fees.receiverName, "Example Ltd");
+  assert.deepEqual(problemsOf({ fees: { ...example.fees, ...rate } }), ["fees.receiver is required when fees.rate is above 0"]);
 });
 
 test("fee split: the factory's values from the allow-list, the operator's from the config, and the splitter they give", () => {
@@ -237,9 +311,10 @@ test("fee split: refused unless the allow-list lists the factory, and wherever t
   }
   assert.match(only({ fees: { split: { factory: DRY_RUN, operator: OPERATOR } } }), /fees\.split\.operatorRate must be/);
   // One kind of fee or the other.
-  const both = /fees\.split can't be set with fees\.partnerFeeBps or fees\.receiver/;
-  assert.match(only({ fees: { partnerFeeBps: 10, receiver: RECEIVER, split: SPLIT } }), both);
-  assert.match(only({ fees: { receiver: RECEIVER, split: SPLIT } }), both);
+  assert.equal(only({ fees: { partnerFeeBps: 10, receiver: RECEIVER, split: SPLIT } }), SPLIT_AND_PLAIN);
+  assert.equal(only({ fees: { rate: 100, receiver: RECEIVER, split: SPLIT } }), SPLIT_AND_PLAIN);
+  assert.equal(only({ fees: { receiver: RECEIVER, split: SPLIT } }), SPLIT_AND_PLAIN);
+  assert.equal(only({ fees: { receiverName: "Example Ltd", split: SPLIT } }), SPLIT_AND_PLAIN);
   // Addresses: 0x and 40 hex digits, with a valid checksum when in mixed case.
   assert.match(only({ fees: { split: { ...SPLIT, factory: "0x5B73C5498c1E3b4dbA84de0F1833c4a029d90519" } } }), /fees\.split\.factory must be 0x and 40 hex digits/);
   assert.match(only({ fees: { split: { ...SPLIT, operator: "0x2222" } } }), /fees\.split\.operator must be/);

@@ -1,5 +1,6 @@
-/** The fee split's rates and arithmetic (docs/fee-split.md), apart from the address maths in ./fee-split.ts: the app
- * bundles this module, so it imports nothing. ./fee-split.ts re-exports all of it.
+/** Fee rates and their arithmetic, for a fee split (docs/fee-split.md) and a plain fee given as a rate (docs/fees.md),
+ * apart from the address maths in ./fee-split.ts: the app bundles this module, so it imports nothing. ./fee-split.ts
+ * re-exports all of it.
  *
  * Erasable TypeScript only and no Node imports. */
 
@@ -7,7 +8,7 @@
 export const RATE_SCALE = 100_000;
 
 /** The most an operator may take in a split, on top of the platform's rate: 1,000 per 100,000, the same 1 % as a plain
- * fee (PARTNER_FEE_MAX_BPS). The owner's decision of 2 November 2026 (docs/fee-split.md). */
+ * fee (PARTNER_FEE_MAX_BPS). */
 export const OPERATOR_RATE_MAX = 1_000;
 
 /** A rate as a percentage without trailing zeros: 875 is "0.875", 1,000 is "1". */
@@ -17,10 +18,11 @@ export function formatRate(rate: number): string {
   return fraction ? `${whole}.${fraction}` : String(whole);
 }
 
-/** The fee a split takes on `amountSold`: amountSold × totalRate ÷ 100,000, rounded down. The server pins it, the app
- * puts it in the intent, and the wallet window signs a fee to a splitter only when it is exactly this. */
-export function splitFee(amountSold: bigint, totalRate: number): bigint {
-  return (amountSold * BigInt(totalRate)) / BigInt(RATE_SCALE);
+/** The fee at `rate` per 100,000 on `amountSold`: amountSold × rate ÷ 100,000, rounded down. A split's fee is this at
+ * its total rate, and a plain fee given as a rate (fees.rate) this at that rate. The server pins it, the app puts it in
+ * the intent, and the wallet window signs such a fee only when it is exactly this. */
+export function splitFee(amountSold: bigint, rate: number): bigint {
+  return (amountSold * BigInt(rate)) / BigInt(RATE_SCALE);
 }
 
 /** What the splitter owes each party out of `fee`: fee × its rate ÷ the sum of both rates, rounded down

@@ -166,7 +166,8 @@ export const EMPTY_FEE_ALLOW_LIST: FeeAllowList = Object.freeze({ receivers: [],
 
 /** How an address in the config or the allow-list must be written. */
 export const ADDRESS_RULE = "0x and 40 hex digits, in lower case or with a valid checksum";
-const PLATFORM_NAME_MAX = 40;
+/** The longest name the review shows for who gets a fee: a factory's platformName, or a plain fee's receiverName. */
+export const PLATFORM_NAME_MAX = 40;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -175,7 +176,7 @@ export const isOperatorRate = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= OPERATOR_RATE_MAX;
 
 /** A name for the review: 1 to `max` characters, no space at either end, no control character, no < or >. */
-function isPlainName(value: unknown, max: number): value is string {
+export function isPlainName(value: unknown, max: number): value is string {
   if (typeof value !== "string" || !value || value !== value.trim() || value.length > max) return false;
   for (const ch of value) {
     const code = ch.charCodeAt(0);

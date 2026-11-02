@@ -10,8 +10,8 @@
  * vite.config.ts, and its types are shared with browser code. Reading the file from disk lives in `./node.ts`. */
 
 import {
-  ADDRESS_RULE, EMPTY_FEE_ALLOW_LIST, OPERATOR_RATE_MAX, checksumAddress, describeSplitRefusal, isAddress, isOperatorRate, predictSplitter,
-  sameAddress, splitRefusal, type FeeAllowList,
+  ADDRESS_RULE, EMPTY_FEE_ALLOW_LIST, OPERATOR_RATE_MAX, PLATFORM_NAME_MAX, RATE_SCALE, checksumAddress, describeSplitRefusal, isAddress,
+  isOperatorRate, isPlainName, predictSplitter, sameAddress, splitRefusal, type FeeAllowList,
 } from "./fee-split.ts";
 import { ISO_COUNTRY_CODES, STOCKS_ATTESTATION_HEADER, STOCKS_EDGE_SECRET_HEADER } from "./stocks.ts";
 
@@ -42,9 +42,20 @@ export type ExclipConfigInput = {
     /** Partner fee in basis points (100 = 1 %, the maximum), added to every swap through SODAX's partner fee.
      * Default 0. */
     partnerFeeBps?: number;
-    /** The EVM address that receives the fee; required when partnerFeeBps is above 0. The passkey wallet must also
-     * list it in apps/wallet/fee-receivers.json, or it refuses every swap that carries a fee. */
+    /** The partner fee as a rate per 100,000 of the amount sold instead of partnerFeeBps, never with it: 875 is
+     * 0.875 %, at most 1,000 (1 %). The fee on each swap is the amount sold × rate ÷ 100,000, rounded down, pinned as
+     * an amount. Default 0. */
+    rate?: number;
+    /** With rate: the fee in basis points, at most 100 (1 %), on a swap with a tokenised stock on either side, paid to
+     * receiver instead of the rate. Default 0: no fee on those swaps. partnerFeeBps is charged on every swap, stocks
+     * included. */
+    stockFeeBps?: number;
+    /** The EVM address that receives the fee; required when partnerFeeBps or rate is above 0. The passkey wallet must
+     * also list it in apps/wallet/fee-receivers.json, or it refuses every swap that carries a fee. */
     receiver?: string | null;
+    /** Who the trade review names as getting the fee, which may differ from brand.name: plain text of 1 to 40
+     * characters. Default brand.name. Not with a split, whose review names the platform and the operator. */
+    receiverName?: string;
     /** A fee split instead of the plain fee above, never with it (docs/fee-split.md): the fee on each swap goes to the
      * operator's splitter on Sonic, which pays the platform its rate and the operator its own. The factory must be
      * listed in apps/wallet/fee-receivers.json, which fixes the platform's address, its rate and the cap. Default:
@@ -137,10 +148,16 @@ export type ExclipConfig = {
   origins: { app: string; wallet: string };
   fees: {
     partnerFeeBps: number;
+    rate: number;
     receiver: string | null;
-    /** The plain fee the server pins on every quote and intent: null unless a receiver is set and the rate is above 0. */
+    /** fees.receiverName, or brand.name. */
+    receiverName: string;
+    /** The plain fee the server pins on every quote and intent: null unless a receiver is set and partnerFeeBps is
+     * above 0. */
     partnerFee: { address: string; percentage: number } | null;
-    /** The fee split, or null. A config sets it or a plain fee, never both. */
+    /** The plain fee given as a rate: null unless a receiver is set and rate is above 0. */
+    rateFee: RateFee | null;
+    /** The fee split, or null. A config sets it, partnerFeeBps or rate, never two of them. */
     split: FeeSplit | null;
   };
   features: { trading: boolean; embeddedWallet: boolean };
@@ -171,6 +188,16 @@ export type FeeSplit = {
   stockFee: { address: string; percentage: number } | null;
 };
 
+/** A plain fee given as a rate (fees.rate), resolved: an amount to `address`, worked out from each swap. */
+export type RateFee = {
+  address: string;
+  /** Per 100,000 of the amount sold. The fee is the amount sold × rate ÷ 100,000, rounded down (splitFee). */
+  rate: number;
+  /** What the server pins instead on a swap with a tokenised stock on either side: fees.stockFeeBps to `address`, or
+   * null for none. */
+  stockFee: { address: string; percentage: number } | null;
+};
+
 /** Credentials. Only apps/server receives these. */
 export type ExclipSecrets = {
   sodaxApiKey: string | null;
@@ -190,6 +217,9 @@ export type Env = Readonly<Record<string, string | undefined>>;
 /** ExClip's ceiling on a plain partner fee: 1 %. The wallet window refuses anything above it. In a split it limits the
  * operator's rate instead (OPERATOR_RATE_MAX, the same 1 %), and the total may reach the factory's cap. */
 export const PARTNER_FEE_MAX_BPS = 100;
+
+/** The same ceiling on a plain fee given as a rate (fees.rate): 1,000 per 100,000 of the amount sold. */
+export const FEE_RATE_MAX = (PARTNER_FEE_MAX_BPS * RATE_SCALE) / 10_000;
 
 /** Local development: web app, wallet window and server on fixed localhost ports. */
 export const DEV_ORIGINS = {
@@ -238,7 +268,7 @@ const ATTESTATION_SECRET_MIN = 32;
 const KNOWN_KEYS: Record<string, readonly string[]> = {
   "": ["sodax", "fees", "origins", "brand", "features", "wallet", "server", "stocks"],
   sodax: ["apiKey"],
-  fees: ["partnerFeeBps", "receiver", "split"],
+  fees: ["partnerFeeBps", "rate", "stockFeeBps", "receiver", "receiverName", "split"],
   "fees.split": ["factory", "operator", "operatorRate", "stockFeeBps"],
   origins: ["app", "wallet"],
   brand: ["name", "operator", "logo", "colors", "termsUrl", "privacyUrl"],
@@ -382,12 +412,31 @@ export function resolveConfig(
 
   const f = section("fees");
   const partnerFeeBps = whole(f.partnerFeeBps, 0, 0, PARTNER_FEE_MAX_BPS, "fees.partnerFeeBps");
+  // The plain fee as a rate instead: an amount worked out from each swap, and a fee of its own on stock swaps.
+  const rate = whole(f.rate, 0, 0, FEE_RATE_MAX, "fees.rate");
+  const stockFeeBps = whole(f.stockFeeBps, 0, 0, PARTNER_FEE_MAX_BPS, "fees.stockFeeBps");
   let receiver: string | null = null;
   if (f.receiver !== undefined && f.receiver !== null && f.receiver !== "") {
     if (typeof f.receiver === "string" && EVM_ADDRESS.test(f.receiver)) receiver = f.receiver;
     else problems.push("fees.receiver must be an EVM address (0x and 40 hex digits) or null");
   }
+  if (partnerFeeBps > 0 && rate > 0) {
+    problems.push("fees.partnerFeeBps and fees.rate can't both be set: a plain fee is given in basis points or as a rate, never both");
+  }
   if (partnerFeeBps > 0 && receiver === null) problems.push("fees.receiver is required when fees.partnerFeeBps is above 0");
+  else if (rate > 0 && receiver === null) problems.push("fees.receiver is required when fees.rate is above 0");
+  if (stockFeeBps > 0 && rate === 0) {
+    problems.push(
+      "fees.stockFeeBps can be set only with fees.rate above 0: fees.partnerFeeBps is charged on every swap, stocks included, " +
+        "and a split has fees.split.stockFeeBps",
+    );
+  }
+  // The review shows it where it shows a factory's platformName, so it follows the same rules.
+  let receiverName = brand.name;
+  if (f.receiverName !== undefined) {
+    if (isPlainName(f.receiverName, PLATFORM_NAME_MAX)) receiverName = f.receiverName;
+    else problems.push(`fees.receiverName must be plain text of 1 to ${PLATFORM_NAME_MAX} characters, with no space at either end`);
+  }
 
   // A fee split: the operator's values from here, the factory's from the reviewed allow-list. Then the factory's own
   // refusals (FeeSplitterFactory.sol:83-88): CREATE2 gives an address for any input, and a fee sent where the factory
@@ -399,9 +448,12 @@ export function resolveConfig(
     if (!isAddress(factory)) problems.push(`fees.split.factory must be ${ADDRESS_RULE}`);
     if (!isAddress(operator)) problems.push(`fees.split.operator must be ${ADDRESS_RULE}`);
     if (!isOperatorRate(operatorRate)) problems.push(`fees.split.operatorRate must be a whole number from 0 to ${OPERATOR_RATE_MAX}`);
-    const stockFeeBps = whole(f.split.stockFeeBps, 0, 0, PARTNER_FEE_MAX_BPS, "fees.split.stockFeeBps");
-    if (partnerFeeBps > 0 || receiver !== null) {
-      problems.push("fees.split can't be set with fees.partnerFeeBps or fees.receiver: a config sets a plain fee or a split, never both");
+    const operatorStockFeeBps = whole(f.split.stockFeeBps, 0, 0, PARTNER_FEE_MAX_BPS, "fees.split.stockFeeBps");
+    if (partnerFeeBps > 0 || rate > 0 || receiver !== null || f.receiverName !== undefined) {
+      problems.push(
+        "fees.split can't be set with fees.partnerFeeBps, fees.rate, fees.receiver or fees.receiverName: " +
+          "a config sets a plain fee or a split, never both",
+      );
     }
     const listed = isAddress(factory) ? allowList.factories.find((x) => sameAddress(x.address, factory)) : undefined;
     if (isAddress(factory) && !listed) {
@@ -423,7 +475,7 @@ export function resolveConfig(
           operator: checksumAddress(operator),
           operatorRate,
           totalRate: listed.platformRate + operatorRate,
-          stockFee: stockFeeBps > 0 ? { address: checksumAddress(operator), percentage: stockFeeBps } : null,
+          stockFee: operatorStockFeeBps > 0 ? { address: checksumAddress(operator), percentage: operatorStockFeeBps } : null,
         };
       }
     }
@@ -508,8 +560,13 @@ export function resolveConfig(
       origins: { app, wallet },
       fees: {
         partnerFeeBps,
+        rate,
         receiver,
+        receiverName,
         partnerFee: partnerFeeBps > 0 && receiver ? { address: receiver, percentage: partnerFeeBps } : null,
+        rateFee: rate > 0 && receiver
+          ? { address: receiver, rate, stockFee: stockFeeBps > 0 ? { address: receiver, percentage: stockFeeBps } : null }
+          : null,
         split,
       },
       features,

@@ -19,7 +19,15 @@ export default {
     // The EVM address that receives the fee. It must also be listed in apps/wallet/fee-receivers.json (a change made
     // only by a reviewed commit), or the passkey wallet refuses every swap that carries a fee.
     receiver: null,
-    // Or a fee split instead of the two above, never with them (docs/fee-split.md): the fee on each swap goes to your
+    // Or the fee as a rate per 100,000 of the amount sold instead of partnerFeeBps, never with it (docs/fees.md), paid
+    // to receiver above: the fee on each swap is the amount sold × rate ÷ 100,000, rounded down, and the passkey wallet
+    // signs exactly that fee and no other:
+    //
+    //   rate: 875, // 0.875 %, at most 1,000 (1 %)
+    //   stockFeeBps: 0, // in basis points, at most 100, on swaps with a tokenised stock on either side: 0 is none
+    //   receiverName: "Example Ltd", // who the trade review names as getting the fee; brand.name when left out
+    //
+    // Or a fee split instead of a plain fee, never with one (docs/fee-split.md): the fee on each swap goes to your
     // splitter on Sonic, which pays the platform its rate and you yours. The factory must be listed in
     // apps/wallet/fee-receivers.json, which fixes the platform's address and rate, and so must the split, or the
     // passkey wallet refuses it. The factory below is the local dry run's (contracts/fee-split/README.md), and the
