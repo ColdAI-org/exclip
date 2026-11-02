@@ -46,8 +46,8 @@ Then edit `exclip.config.ts`:
 - `brand`: your product name, who runs it (`operator`), your logo, and links
   to your terms and privacy notice. "ExClip" and its logo are not licensed
   for your deployment (see [NOTICE](../NOTICE)).
-- `fees`: leave `partnerFeeBps` at `0`, and `split` unset, for a first
-  deployment.
+- `fees`: leave `partnerFeeBps` and `rate` at `0`, and `split` unset, for a
+  first deployment.
 - `server.trustProxy`: the number of proxies in front of the server (see
   [Proxies and client addresses](#proxies-and-client-addresses)).
 
@@ -429,14 +429,15 @@ curl -s https://swap.example.org/api/exclip/config
 The answer holds public settings only:
 
 ```json
-{"tradingEnabled":true,"sodaxConfigured":true,"partnerFeeBps":0,"feeReceiver":null,"feeSplit":null,"embeddedWallet":true,"walletOrigin":"https://wallet.example.org","unbackedLimitUsd":100,"stocksEnabled":false,"stocksTermsVersion":null}
+{"tradingEnabled":true,"sodaxConfigured":true,"partnerFeeBps":0,"feeReceiver":null,"feeRate":null,"feeReceiverName":null,"feeSplit":null,"embeddedWallet":true,"walletOrigin":"https://wallet.example.org","unbackedLimitUsd":100,"stocksEnabled":false,"stocksTermsVersion":null}
 ```
 
 - `sodaxConfigured` must be `true`.
-- `partnerFeeBps` and `feeReceiver` must be what you configured: `0` and
-  `null` unless you set a plain fee. `feeSplit` is `null` unless you set a
-  fee split. Then it names your splitter, the platform and you, with each
-  rate ([`GET /config`](api.md#get-config)).
+- `partnerFeeBps`, `feeReceiver`, `feeRate` and `feeReceiverName` must be
+  what you configured: `0` and `null` unless you set a plain fee. A fee
+  rate shows as `feeRate`, with `partnerFeeBps` at `0`. `feeSplit` is
+  `null` unless you set a fee split. Then it names your splitter, the
+  platform and you, with each rate ([`GET /config`](api.md#get-config)).
 - `walletOrigin` must be your wallet origin, or `null` while the wallet is
   switched off.
 - `stocksEnabled` must be `false` unless you switched tokenised stocks on.

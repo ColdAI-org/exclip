@@ -203,12 +203,20 @@ example *a 0.1 % fee on top of the platform's, with the factory 0x…*.
 Otherwise set a plain fee. Never set both: the config check refuses that.
 
 **A plain fee.** Turn the percentage into basis points: 1 % is `100`, the
-most allowed, so 0.1 % is `10`. Only whole numbers work; if the rate isn't
-a whole number of basis points, or is above 1 %, ask. Then follow
+most allowed, so 0.1 % is `10`. If it isn't a whole number of basis
+points, such as 0.875 %, or the request asks for a different fee, or none,
+on swaps with tokenised stocks, set a rate per 100,000 of the amount sold
+instead: 0.875 % is `875`, and 1 % (`1000`) is the most allowed
+([a fee rate](docs/fees.md#a-fee-rate)). If the rate isn't a whole number
+per 100,000, or is above 1 %, ask. Then follow
 [turn a fee on](docs/fees.md#turn-a-fee-on):
 
-1. In `exclip.config.ts`, set `fees.partnerFeeBps` (`10`) and
-   `fees.receiver` to the address exactly as given: `0x` and 40 hex digits.
+1. In `exclip.config.ts`, set `fees.partnerFeeBps` (`10`) or `fees.rate`
+   (`875`), never both, and `fees.receiver` to the address exactly as
+   given: `0x` and 40 hex digits. With a rate, set `fees.stockFeeBps` only
+   if a fee on swaps with tokenised stocks was asked for. Set
+   `fees.receiverName` only if the request names who gets the fee, and it
+   isn't the brand: the review shows that name.
 2. Add the same address to `receivers` in `apps/wallet/fee-receivers.json`.
    Keep the `$comment` and the other two lists. Without this the wallet
    refuses every swap that carries a fee
@@ -222,7 +230,10 @@ a whole number of basis points, or is above 1 %, ask. Then follow
 4. Tell the person that the allow-list decides where the wallet lets fees
    go: it changes only in a reviewed commit, and someone must confirm who
    controls the address through a channel other than the pull request
-   ([CONTRIBUTING](CONTRIBUTING.md#changes-that-get-extra-review)).
+   ([CONTRIBUTING](CONTRIBUTING.md#changes-that-get-extra-review)). With a
+   rate, tell them too that the wallet builds the rate, the fee on stock
+   swaps and the receiver's name in, so a change to any of them needs a
+   wallet rebuild.
 
 **A fee split.** The operator's rate is per 100,000 of the amount sold:
 0.1 % is `100`, and 1 % (`1000`) is the most allowed. If the rate isn't a
@@ -236,10 +247,11 @@ whole number per 100,000, or is above 1 %, ask. Then follow
 2. Add the split under `splits`: the factory, the operator's address
    exactly as given, and `operatorRate`.
 3. In `exclip.config.ts`, set `fees.split` to the same `factory`,
-   `operator` and `operatorRate`, and keep `partnerFeeBps` at `0` and
-   `receiver` at `null`. Set `stockFeeBps` only if a fee on swaps with
-   tokenised stocks was asked for, and if so, add the operator's address
-   under `receivers` too.
+   `operator` and `operatorRate`, keep `partnerFeeBps` and `rate` at `0`
+   and `receiver` at `null`, and leave `receiverName` out. Set
+   `fees.split.stockFeeBps` only if a fee on swaps with tokenised stocks
+   was asked for, and if so, add the operator's address under `receivers`
+   too.
 4. Update the same test so that it expects what `parseFeeAllowList` returns
    for the file, and rename it. The test's failure message shows what it
    got.
@@ -293,9 +305,9 @@ End with a short summary: what you changed, including `exclip.config.ts`
 each check. Say where to see what the screenshots leave out: with
 `pnpm dev` running, the footer at the bottom of `http://localhost:5173`
 names the operator, and `http://localhost:5173/api/exclip/config` shows the
-fee as `partnerFeeBps` and `feeReceiver`, or a split as `feeSplit`. Then
-list what the person still has to do. You can't, or shouldn't, do these
-yourself:
+fee as `partnerFeeBps` and `feeReceiver`, a rate as `feeRate` and
+`feeReceiver`, or a split as `feeSplit`. Then list what the person still
+has to do. You can't, or shouldn't, do these yourself:
 
 - **The SODAX API key.** They set it as `SODAX_API_KEY` in the server's
   environment, which the docs prefer to `sodax.apiKey` in production

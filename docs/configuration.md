@@ -27,16 +27,17 @@ no enums or namespaces.
 |---|---|---|
 | `apps/server` | at start | everything, including the credentials |
 | `apps/web` | at build, and in `pnpm dev` | the brand, the app origin and the wallet origin |
-| `apps/wallet` | at build, and in `pnpm dev` | the app origin it answers, its own origin, the brand name, the operator, the deposit limit and whether tokenised stocks are on |
+| `apps/wallet` | at build, and in `pnpm dev` | the app origin it answers, its own origin, the brand name, the operator, the deposit limit, whether tokenised stocks are on, a fee rate with its fee on stock swaps, and the fee receiver's name |
 
 A browser bundle never gets a credential. The builds take a projection of the
 public settings (`webBuildConfig` and `walletBuildConfig`), picked field by
 field, and a test checks that no secret can reach them. The wallet's build
 also takes the fee allow-list: its plain receivers, and each listed split's
 terms. After you change the brand, the origins, `wallet.unbackedLimitUsd` or
-`stocks.enabled`, rebuild. The fee rate, the feature switches, the backup
-limits and the other stock settings need only a server restart. A new fee
-receiver or fee split also needs a change to
+`stocks.enabled`, rebuild. After you change `fees.rate`, `fees.stockFeeBps`
+or `fees.receiverName`, rebuild the wallet. `fees.partnerFeeBps`, the
+feature switches, the backup limits and the other stock settings need only
+a server restart. A new fee receiver or fee split also needs a change to
 `apps/wallet/fee-receivers.json` and a wallet rebuild (see
 [`fees`](#fees)).
 
@@ -50,8 +51,11 @@ receiver or fee split also needs a change to
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `fees.partnerFeeBps` | `0` | Partner fee in basis points, a whole number from 0 to 100 (100 = 1 %, the maximum). SODAX takes it from each swap and pays it to the receiver. |
-| `fees.receiver` | `null` | The EVM address that receives the fee. It is required when `partnerFeeBps` is above 0. |
+| `fees.partnerFeeBps` | `0` | Partner fee in basis points, a whole number from 0 to 100 (100 = 1 %, the maximum). SODAX takes it from each swap, stocks included, and pays it to the receiver. |
+| `fees.rate` | `0` | The partner fee as a rate per 100,000 of the amount sold, instead of `partnerFeeBps` and never with it: a whole number from 0 to 1,000 (1 %). `875` is 0.875 %. The fee on each swap is the amount sold × `rate` ÷ 100,000, rounded down. |
+| `fees.stockFeeBps` | `0` | With `rate`: the fee in basis points, 0 to 100, on a swap with a tokenised stock on either side, which never pays the rate. It is paid to `receiver`. `0` charges nothing on those swaps. |
+| `fees.receiver` | `null` | The EVM address that receives the fee. It is required when `partnerFeeBps` or `rate` is above 0. |
+| `fees.receiverName` | `brand.name` | Who the trade review names as getting a plain fee, which may differ from your brand: 1 to 40 characters, with no space at either end, no control character and no `<` or `>`. Not with a split. |
 | `fees.split` | `null` | A [fee split](fee-split.md) instead of a plain fee, never with one. The four settings below. |
 | `fees.split.factory` | none | The fee-split factory's address on Sonic. `apps/wallet/fee-receivers.json` must list it, which fixes the platform's address, its rate and the cap. |
 | `fees.split.operator` | none | The operator's address on Sonic, where its share is paid. |
@@ -60,11 +64,12 @@ receiver or fee split also needs a change to
 
 ExClip charges no fee unless you set one. The server pins the configured fee
 on every quote and intent it forwards, and drops any fee the browser sends.
-A split's fee is worked out for each swap, from the amount sold.
+A fee rate's fee and a split's fee are worked out for each swap, from the
+amount sold ([a fee rate](fees.md#a-fee-rate)).
 
 To charge a plain fee, you need all three of these:
 
-1. Set `fees.partnerFeeBps` and `fees.receiver`.
+1. Set `fees.partnerFeeBps` or `fees.rate`, and `fees.receiver`.
 2. Add the receiver to `apps/wallet/fee-receivers.json`, in a reviewed
    commit, and rebuild the wallet. The passkey wallet signs a swap that
    carries a fee only when the receiver is on that list. The list ships empty,
@@ -86,7 +91,7 @@ To charge a plain fee, you need all three of these:
 A split needs the same three, with the factory and the split in the
 allow-list instead of a receiver. The config check refuses a split whose
 factory isn't listed, one that the factory would refuse, and one set with
-a `partnerFeeBps` above 0 or a `receiver`
+a `partnerFeeBps` or `rate` above 0, a `receiver` or a `receiverName`
 ([turn a split on](fees.md#turn-a-split-on)).
 
 ## `origins`

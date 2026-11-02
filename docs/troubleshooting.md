@@ -25,9 +25,13 @@ start again. `pnpm build` runs the same checks and stops on the same lines.
 |---|---|
 | `unknown setting …` | A typo, or a setting this version doesn't have. Compare your file with `exclip.config.example.ts`. |
 | `origins.wallet needs a host of its own: …` | Put the wallet on a host that the app isn't on or under, such as `wallet.example.org` beside `example.org` ([origins](configuration.md#origins)). |
-| `fees.receiver is required when fees.partnerFeeBps is above 0` | Set the receiver, or set the fee back to `0` ([turn a fee on](fees.md#turn-a-fee-on)). |
+| `fees.receiver is required when fees.partnerFeeBps is above 0`, or `when fees.rate is above 0` | Set the receiver, or set the fee back to `0` ([turn a fee on](fees.md#turn-a-fee-on)). |
+| `fees.partnerFeeBps and fees.rate can't both be set: …` | A plain fee is given in basis points or as a rate per 100,000, never both. Keep one, and set the other to `0` ([a fee rate](fees.md#a-fee-rate)). |
+| `fees.rate must be a whole number from 0 to 1000` | The rate is per 100,000 of the amount sold: `875` is 0.875 %, and `1000`, 1 %, is the most. |
+| `fees.stockFeeBps can be set only with fees.rate above 0: …` | The fee on stock swaps belongs to a fee rate. A fee in basis points is charged on every swap, stocks included, and a split has `fees.split.stockFeeBps`. |
+| `fees.receiverName must be plain text of 1 to 40 characters, …` | Give a name of 1 to 40 characters, with no space at either end, no control character and no `<` or `>`. Or leave the setting out, and the review names `brand.name`. |
 | `fees.split.factory 0x… is not listed in apps/wallet/fee-receivers.json: …` | Check the address. A factory is listed under `factories` in a reviewed commit, with the values read from the chain ([the fee allow-list](fee-split.md#the-fee-allow-list)). |
-| `fees.split can't be set with fees.partnerFeeBps or fees.receiver: …` | A config sets a plain fee or a split, never both. Remove one ([a fee split](fees.md#a-fee-split)). |
+| `fees.split can't be set with fees.partnerFeeBps, fees.rate, fees.receiver or fees.receiverName: …` | A config sets a plain fee or a split, never both. Remove one ([a fee split](fees.md#a-fee-split)). |
 | `fees.split.operatorRate must be a whole number from 0 to 1000` | The rate is per 100,000 of the amount sold: `100` is 0.1 %, and `1000`, 1 %, is the most. |
 | `fees.split: …` ending `(ZeroAddress)`, `(OperatorIsPlatform)`, `(RateTooHigh)` or `(ZeroRates)` | The factory would refuse this split, so its splitter could never exist. The message says why ([the config](fee-split.md#the-config)). |
 | `fee-receivers.json: …` | The fee allow-list is broken. The server and both builds read it, and each stops on it. The message names the entry ([below](#the-build-fails-or-warns)). |

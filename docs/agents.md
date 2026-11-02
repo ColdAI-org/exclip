@@ -35,6 +35,12 @@ example "the app at https://swap.acme.example and the wallet at
 https://wallet.acme.example") and the links to your terms and privacy
 notice. Without them, the agent leaves those settings for you.
 
+A fee that isn't a whole number of basis points, such as 0.875 %, becomes
+a [fee rate](fees.md#a-fee-rate), per 100,000 of the amount sold. So does
+one with a different fee, or none, on swaps with a tokenised stock. The
+trade review names your brand as getting the fee, unless you name someone
+else in the request.
+
 To share one fee with a platform instead, through a
 [fee split](fee-split.md), ask for it and name the factory, for example
 "a 0.1% fee on top of the platform's, with the factory 0xFactoryAddress,
@@ -114,7 +120,11 @@ The agent can't do these, or shouldn't:
    - `brand`: your name, operator and logo path, with no "ExClip" in them;
    - `fees.partnerFeeBps`: the fee in basis points, where `100` is 1 % and
      `10` is 0.1 %;
-   - `fees.receiver`: your address again;
+   - or `fees.rate`: the fee per 100,000 of the amount sold, where `875` is
+     0.875 %, with `partnerFeeBps` at `0`, and `fees.stockFeeBps`, the fee
+     on swaps with a tokenised stock, if you asked for one;
+   - `fees.receiver`: your address again, and `fees.receiverName`, if you
+     named who gets the fee;
    - or, for a split, `fees.split`: the factory, your address and your rate
      per 100,000, where `100` is 0.1 %, with `partnerFeeBps` at `0` and
      `receiver` at `null`;
@@ -128,8 +138,10 @@ The agent can't do these, or shouldn't:
    Acme Ltd.", and ends with "Powered by ExClip".
    `http://localhost:5173/api/exclip/config` shows your fee:
    `"partnerFeeBps": 10` for 0.1 %, and your address as `feeReceiver`. A
-   split shows as `feeSplit`, with the splitter, each party's name and its
-   rate ([`GET /config`](api.md#get-config)).
+   rate shows as `feeRate`, `{ "rate": 875, "stockFeeBps": 0 }` for
+   0.875 %, with your address as `feeReceiver` and its name as
+   `feeReceiverName`. A split shows as `feeSplit`, with the splitter, each
+   party's name and its rate ([`GET /config`](api.md#get-config)).
 
 ## Check before you go live
 

@@ -191,7 +191,10 @@ value stops the server and the build, with a list of every problem.
 |---|---|---|
 | `sodax.apiKey` | none | Your SODAX API key. Only the server reads it |
 | `fees.partnerFeeBps` | `0` | Partner fee in basis points, a whole number from 0 to 100 (1 %) |
+| `fees.rate` | `0` | The partner fee as a [rate](docs/fees.md#a-fee-rate) per 100,000 of the amount sold instead, a whole number from 0 to 1,000 (1 %): `875` is 0.875 % |
+| `fees.stockFeeBps` | `0` | With `rate`, the fee in basis points on swaps with a tokenised stock, which never pay the rate |
 | `fees.receiver` | `null` | The EVM address that receives the fee. Required when the fee is above 0, and it must be in `apps/wallet/fee-receivers.json` too |
+| `fees.receiverName` | `brand.name` | Who the trade review names as getting the fee |
 | `fees.split` | `null` | A [fee split](docs/fee-split.md) instead of a plain fee: a factory listed in `apps/wallet/fee-receivers.json`, the operator's address, its rate per 100,000 (at most 1,000), and its own fee on stock swaps, `stockFeeBps` |
 | `origins.app` | `https://exclip.example.com` | Where the app is served |
 | `origins.wallet` | `https://wallet.example.com` | Where the passkey wallet is served, on a host of its own |
@@ -395,22 +398,24 @@ ExClip charges no fee unless the operator sets one. A swap then costs the
 source network's gas, and SODAX's fee, which is included in the rate. The
 review says both.
 
-An operator can add a partner fee of up to 1 %. Or it can use a
+An operator can add a partner fee of up to 1 %, in basis points or as a
+[rate](docs/fees.md#a-fee-rate) in steps of 0.001 %. Or it can use a
 [fee split](docs/fee-split.md): one fee, paid to a contract on Sonic that
 shares it between a platform and the operator. The split's contracts, and
 the code that uses them, are not audited. Either way, the fee fails closed
 at every step, so a mistake means no fee rather than a wrong one:
 
 - **The config** refuses a fee without a receiver, a fractional rate, or
-  more than 100 basis points, and a split whose factory isn't listed or
-  that the factory would refuse. The server won't start with either.
+  more than 1 %, and a split whose factory isn't listed or that the
+  factory would refuse. The server won't start with either.
 - **The server** pins the configured fee on every quote and intent, and
   drops any fee the browser sends. A browser can't add, raise, lower or
   redirect it.
 - **The passkey wallet** signs a fee only to a receiver in
   `apps/wallet/fee-receivers.json`, or to the splitter of a split listed
-  there, which it works out itself. It signs a split's fee only at exactly
-  the split's rates. That file ships empty and changes only through a
+  there, which it works out itself. It signs a fee rate's fee only at
+  exactly the rate it was built with, and a split's fee only at exactly the
+  split's rates. That file ships empty and changes only through a
   reviewed commit, so until someone adds a receiver or a split, the wallet
   refuses every swap that carries a fee.
 
@@ -438,7 +443,7 @@ or a split on and off.
   and stored append-only. Each read or write needs a fresh passkey signature
   on a single-use challenge.
 
-[Security](docs/security.md) lists 28 invariants with the test that proves
+[Security](docs/security.md) lists 35 invariants with the test that proves
 each one, and the known limitations.
 
 Report a vulnerability privately, as [SECURITY.md](SECURITY.md) explains,

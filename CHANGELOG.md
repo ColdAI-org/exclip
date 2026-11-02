@@ -109,6 +109,25 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     for, and warns when the config's split isn't listed;
   - on a swap with a tokenised stock on either side, never the splitter:
     the operator's own fee (`stockFeeBps`), or none.
+- A plain fee as a rate per 100,000 of the amount sold, in steps of
+  0.001 % up to 1 % ([a fee rate](docs/fees.md#a-fee-rate)):
+  - `fees.rate` in `exclip.config.ts`, instead of `fees.partnerFeeBps` and
+    never with it, paid to `fees.receiver`, and `fees.stockFeeBps`, its own
+    fee in basis points on a swap with a tokenised stock on either side,
+    which never pays the rate. It defaults to none;
+  - `fees.receiverName`, who the trade review names as getting a plain fee,
+    in basis points or as a rate. It defaults to `brand.name`;
+  - in the SODAX proxy, the rate's fee pinned as an amount to the receiver
+    on every quote and intent, worked out from the amount sold, rounded
+    down, and `400 BAD_AMOUNT` for a request it can't work the fee out
+    from;
+  - `feeRate` and `feeReceiverName` in `/api/exclip/config`, and
+    `feeReceiver` for either form of plain fee;
+  - in the app, a review row named after the receiver, with the rate and
+    the amount;
+  - in the passkey wallet, a rate's fee signed only to a listed receiver,
+    at exactly the rate it was built with, and with a review that names
+    the receiver.
 - A second CI job, `contracts: forge, slither`, for `contracts/fee-split`:
   formatting, build and tests, the vectors and the splitter code checked
   against the compiled contracts, and Slither, which fails on any finding.

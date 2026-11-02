@@ -86,6 +86,8 @@ What the app reads when it starts. It never carries a key.
   "sodaxConfigured": true,
   "partnerFeeBps": 0,
   "feeReceiver": null,
+  "feeRate": null,
+  "feeReceiverName": null,
   "feeSplit": null,
   "embeddedWallet": true,
   "walletOrigin": "https://wallet.example.org",
@@ -99,14 +101,33 @@ What the app reads when it starts. It never carries a key.
 |---|---|
 | `tradingEnabled` | `features.trading`. When false, the app shows a "Trading is paused" banner; prices, charts and quotes stay live. |
 | `sodaxConfigured` | Whether the server has a SODAX key. It says so, and nothing more. |
-| `partnerFeeBps` | The plain fee the server pins, in basis points. `0` when no plain fee is set, as with a split. |
-| `feeReceiver` | The plain fee's receiver, or `null`. |
+| `partnerFeeBps` | The plain fee the server pins, in basis points. `0` when no fee in basis points is set, as with a fee rate or a split. |
+| `feeReceiver` | The plain fee's receiver, in basis points or as a rate, or `null`. |
+| `feeRate` | The plain fee as a [rate](fees.md#a-fee-rate), or `null` when none is set. See below. |
+| `feeReceiverName` | Who the review names as getting the plain fee: `fees.receiverName`, or `brand.name`. `null` without a plain fee. |
 | `feeSplit` | The [fee split](fee-split.md#the-server), or `null` when none is set. See below. |
 | `embeddedWallet` | `features.embeddedWallet`. |
 | `walletOrigin` | The wallet origin, or `null` when the wallet is off. The app only uses it as an on/off switch: the origin it trusts is fixed in its build. |
 | `unbackedLimitUsd` | `wallet.unbackedLimitUsd`. |
 | `stocksEnabled` | `stocks.enabled`, after `EXCLIP_DISABLE_STOCKS`. When false, the app names and offers no tokenised stock. |
 | `stocksTermsVersion` | `stocks.termsVersion`, the terms users confirm before trading stocks, or `null` while stocks are off. |
+
+The server charges a fee when `feeReceiver` or `feeSplit` is not `null`.
+
+With a fee rate, `partnerFeeBps` is `0`, and `feeRate` gives the rate per
+100,000 of the amount sold and the fee on stock swaps:
+
+```json
+"partnerFeeBps": 0,
+"feeReceiver": "0x1111111111111111111111111111111111111111",
+"feeRate": { "rate": 875, "stockFeeBps": 0 },
+"feeReceiverName": "Example Ltd",
+```
+
+| Field | Meaning |
+|---|---|
+| `rate` | `fees.rate`. The fee is the amount sold × `rate` ÷ 100,000, rounded down, paid to `feeReceiver`. |
+| `stockFeeBps` | `fees.stockFeeBps`, the fee in basis points on a swap with a tokenised stock on either side, which never pays the rate. `0` for none. |
 
 With a split, `feeSplit` says who gets what. Each rate is per 100,000 of
 the amount sold. This example uses the local dry run's splitter:
