@@ -1,6 +1,7 @@
 /** SODAX key proxy. An allow-list, not a pass-through: only the routes below reach api.sodax.com, with the server's
  * x-api-key added and the partner fee pinned server-side. */
 import { STOCK_REFUSALS } from "@exclip/config";
+import { splitFee } from "@exclip/config/fee-split";
 import type { PartnerFee, ServerConfig } from "./config.ts";
 import type { Eligibility } from "./stocks.ts";
 
@@ -15,12 +16,13 @@ export type SodaxRoute = {
   query?: readonly string[];
   /** Cache successful responses this long (ms). */
   ttlMs?: number;
-  /** Body carries SwapExtras: any client partnerFee is removed and the configured one pinned. */
+  /** Body carries SwapExtras: any client partnerFee is removed and the configured one pinned (feeFor). */
   fee?: boolean;
   /** Builds an unsigned transaction: refused while features.trading is off. Status, submit and cancel never are, so
    * an intent that was already signed can always be followed or recovered. */
   builds?: boolean;
-  /** Where the token legs are, for the tokenised-stock refusal. */
+  /** Where the token legs are, for the tokenised-stock refusal, and the amount sold, for a fee split: tokenSrc, tokenDst
+   * and amount on a quote; inputToken, outputToken and inputAmount on an intent. */
   legs?: "quote" | "intent";
   /** Safe to retry on a 5xx (429 is always retried: a rate-limited request was not processed). */
   idempotent?: boolean;
@@ -96,7 +98,28 @@ export function redact(value: unknown, key: string | null): unknown {
   return JSON.parse(text.split(needle).join("[redacted]"));
 }
 
-function pinFee(body: Record<string, unknown>, partnerFee: PartnerFee | null): Record<string, unknown> {
+/** A partner fee as SODAX's request bodies carry it (PartnerFeeV2): a percentage in basis points, or an amount of the
+ * token sold in its smallest units, as a decimal string. */
+type PinnedFee = PartnerFee | { address: string; amount: string };
+
+/** An amount in smallest units as a decimal string: no sign, point or leading zero, and at most 78 digits, a uint256's. */
+const UNITS = /^(?:0|[1-9][0-9]{0,77})$/;
+
+/** The fee pinned on a fee route. A plain fee is pinned as configured, on every swap. A split (docs/fee-split.md) pins
+ * the amount sold × the total rate ÷ 100,000, rounded down, to the splitter, with no percentage, and nothing when that
+ * rounds to 0. On a swap with a tokenised stock on either side it pins the operator's own fee, or none: never the
+ * splitter. "BAD_AMOUNT": a split's request without an amount sold to work the fee out from. */
+function feeFor(config: ServerConfig, route: SodaxRoute, body: Record<string, unknown>, stockLeg: boolean): PinnedFee | null | "BAD_AMOUNT" {
+  const split = config.feeSplit;
+  if (!split) return config.partnerFee;
+  if (stockLeg) return split.stockFee;
+  const sold = body[route.legs === "quote" ? "amount" : "inputAmount"];
+  if (typeof sold !== "string" || !UNITS.test(sold)) return "BAD_AMOUNT";
+  const amount = splitFee(BigInt(sold), split.totalRate);
+  return amount > 0n ? { address: split.splitter, amount: amount.toString() } : null;
+}
+
+function pinFee(body: Record<string, unknown>, partnerFee: PinnedFee | null): Record<string, unknown> {
   // A client-supplied fee (and a delivery hook ExClip never uses) is dropped; the server's fee, if any, is pinned.
   const { partnerFee: _client, hook: _hook, ...rest } = body;
   return partnerFee ? { ...rest, partnerFee: { ...partnerFee } } : rest;
@@ -185,23 +208,34 @@ export function createSodaxProxy(options: SodaxProxyOptions) {
       if (!config.tradingEnabled) return fail(403, "TRADING_DISABLED", "Trading is switched off on this server. Quotes, prices and order status still work.");
     }
 
-    let outBody: unknown = body;
-    if (route.method === "POST") {
-      if (typeof body !== "object" || body === null || Array.isArray(body)) return fail(400, "BAD_BODY", "Expected a JSON object.");
-      if (route.fee) outBody = pinFee(body as Record<string, unknown>, config.partnerFee);
+    if (route.method === "POST" && (typeof body !== "object" || body === null || Array.isArray(body))) {
+      return fail(400, "BAD_BODY", "Expected a JSON object.");
     }
 
     // Tokenised stocks (the tokens SODAX flags isRwa): a request with a stock leg reaches SODAX only when the stock
     // check passes it, and is refused with 451 and the check's reason otherwise. A token list that can't be read refuses
     // every request with a token leg (fail closed), rather than letting a stock through unchecked.
     const legs = legsOf(route, body);
+    let stockLeg = false;
     if (legs.length) {
       const stocks = await stockTokens();
       if (!stocks) return fail(503, "TOKEN_LIST_UNAVAILABLE", "The token list could not be checked. Try again shortly.");
-      if (legs.some(l => stocks.has(`${l.chainKey}|${l.address}`.toLowerCase()))) {
+      stockLeg = legs.some(l => stocks.has(`${l.chainKey}|${l.address}`.toLowerCase()));
+      if (stockLeg) {
         const verdict: Eligibility = stockCheck?.() ?? { eligible: false, code: "STOCKS_DISABLED", country: null };
         if (!verdict.eligible) return fail(451, verdict.code, STOCK_REFUSALS[verdict.code]);
       }
+    }
+
+    // After the stock check: a split's fee depends on whether either leg is a stock.
+    let outBody: unknown = body;
+    if (route.fee) {
+      const fee = feeFor(config, route, body as Record<string, unknown>, stockLeg);
+      if (fee === "BAD_AMOUNT") {
+        const field = route.legs === "quote" ? "amount" : "inputAmount";
+        return fail(400, "BAD_AMOUNT", `Expected ${field} as a whole number of the token's smallest units, written in digits.`);
+      }
+      outBody = pinFee(body as Record<string, unknown>, fee);
     }
 
     const qs = params.toString();

@@ -114,9 +114,10 @@ function TradeFlow({ initialTab, symbol, send }: { initialTab: TradeTab; symbol:
   const feeUnits = units ? (units * BigInt(feeBps)) / 10_000n : 0n;
   const netUnits = units ? units - feeUnits : null;
 
-  // Debounce typing before asking for a quote.
+  // Debounce typing before asking for a quote. The quote starts from the amount sold, as the intent does: the server
+  // pins the fee on the quote and SODAX takes it off that amount, as the SDK's own getQuote does (docs/fee-split.md).
   const [debounced, setDebounced] = useState<bigint | null>(null);
-  useEffect(() => { const t = setTimeout(() => setDebounced(netUnits), 350); return () => clearTimeout(t); }, [netUnits]);
+  useEffect(() => { const t = setTimeout(() => setDebounced(units), 350); return () => clearTimeout(t); }, [units]);
 
   const quoteEnabled = !!fromToken && !!toToken && !!debounced && debounced > 0n && !(fromToken.address === toToken.address && fromChain === toChain) && !stockBlocked;
   const quote = useQuery({

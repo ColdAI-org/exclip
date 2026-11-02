@@ -1,4 +1,4 @@
-/** /api/exclip: SODAX key proxy (allow-list, key handling, fee pinning, caches, 429 backoff, the trading switch and
+/** /api/exclip: SODAX key proxy (allow-list, key handling, fee pinning and the fee split, caches, 429 backoff, the trading switch and
  * the tokenised-stock checks), the stock eligibility routes and the markets empty state. Upstream fetch is stubbed;
  * the key and the secrets are fake. */
 import test from "node:test";
@@ -11,6 +11,7 @@ import {
   ConfigError, PARTNER_FEE_MAX_BPS, STOCK_REFUSALS, STOCK_STATEMENTS, STOCKS_ATTESTATION_HEADER, STOCKS_BASELINE_COUNTRIES,
   resolveConfig, type Env, type ExclipConfigInput,
 } from "@exclip/config";
+import { parseFeeAllowList, type FeeAllowList } from "@exclip/config/fee-split";
 import { createExclipRouter } from "../src/routes/exclip.ts";
 import { serverConfig } from "../src/services/config.ts";
 import { createSodaxProxy, matchSodaxRoute } from "../src/services/sodaxProxy.ts";
@@ -39,7 +40,24 @@ const json = async <T>(res: Response) => (await res.json()) as T;
 const BASE: ExclipConfigInput = { fees: { partnerFeeBps: 30, receiver: RECEIVER }, features: { trading: false, embeddedWallet: false } };
 const pass: express.RequestHandler = (_req, _res, next) => next();
 
-async function serve(options: { input?: ExclipConfigInput; env?: Env; route?: (url: string, call: Call) => Reply | undefined;
+type VectorFactory = { address: string; platform: string; platformRate: number; maxTotalRate: number; initCodeHash: string };
+/** The local dry run's factory (contracts/fee-split/README.md), as a real FeeSplitterFactory gave it on anvil
+ * (contracts/fee-split/test/vectors/splitters.json): the platform 0x1111…1111 at 875 per 100,000 and a cap of 1,875. */
+const DRY_RUN = (JSON.parse(readFileSync(path.join(import.meta.dirname, "../../../contracts/fee-split/test/vectors/splitters.json"), "utf8")) as
+  { factories: VectorFactory[] }).factories[0]!;
+/** The dry run's factory, listed as a reviewer lists it. */
+const ALLOW_LIST = parseFeeAllowList(JSON.stringify({ receivers: [], factories: [{ address: DRY_RUN.address, platformName: "Example Platform",
+  platform: DRY_RUN.platform, platformRate: DRY_RUN.platformRate, maxTotalRate: DRY_RUN.maxTotalRate, initCodeHash: DRY_RUN.initCodeHash }] }));
+const OPERATOR = "0x2222222222222222222222222222222222222222";
+/** The README's sample split: the dry run's factory, OPERATOR and 100 per 100,000, a total of 975. */
+const SPLIT_OF = { factory: DRY_RUN.address, operator: OPERATOR, operatorRate: 100 };
+const SPLITTER = "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe";
+/** The split, with trading on so the fee routes that build transactions answer. */
+const SPLIT: ExclipConfigInput = { fees: { split: SPLIT_OF }, features: { trading: true, embeddedWallet: false } };
+/** Where a client tries to send the fee instead. */
+const ELSEWHERE = "0x3333333333333333333333333333333333333333";
+
+async function serve(options: { input?: ExclipConfigInput; env?: Env; allowList?: FeeAllowList; route?: (url: string, call: Call) => Reply | undefined;
   proxyLimit?: express.RequestHandler; stocksLimit?: express.RequestHandler; clock?: { t: number } } = {}) {
   const calls: Call[] = [];
   const sleeps: number[] = [];
@@ -54,7 +72,7 @@ async function serve(options: { input?: ExclipConfigInput; env?: Env; route?: (u
     if (typeof reply === "function") return reply();
     return new Response(JSON.stringify(reply.body ?? {}), { status: reply.status ?? 200, headers: { "content-type": "application/json", ...reply.headers } });
   };
-  const { config, secrets } = resolveConfig({ ...BASE, ...options.input }, { SODAX_API_KEY: FAKE_KEY, ...options.env });
+  const { config, secrets } = resolveConfig({ ...BASE, ...options.input }, { SODAX_API_KEY: FAKE_KEY, ...options.env }, options.allowList);
   const app = express();
   app.set("trust proxy", true);
   app.use("/api/exclip", createExclipRouter({
@@ -152,7 +170,7 @@ test("/config exposes flags and the fee rate, never the key", async (t) => {
   const s = await serve(); t.after(s.close);
   const res = await s.get("/config");
   assert.equal(res.headers.get("cache-control"), "public, max-age=30");
-  assert.deepEqual(await res.json(), { tradingEnabled: false, sodaxConfigured: true, partnerFeeBps: 30, feeReceiver: RECEIVER,
+  assert.deepEqual(await res.json(), { tradingEnabled: false, sodaxConfigured: true, partnerFeeBps: 30, feeReceiver: RECEIVER, feeSplit: null,
     embeddedWallet: false, walletOrigin: null, unbackedLimitUsd: 100, stocksEnabled: false, stocksTermsVersion: null });
 });
 
@@ -209,6 +227,76 @@ test("a half-set or out-of-range fee stops the server at start instead of runnin
   assert.deepEqual(serverConfig(config, secrets, false).partnerFee, { address: RECEIVER, percentage: 30 });
   const none = resolveConfig({ fees: { partnerFeeBps: 0, receiver: RECEIVER } });
   assert.equal(serverConfig(none.config, none.secrets, false).partnerFee, null, "a receiver alone pins nothing");
+});
+
+// ---- fee split --------------------------------------------------------------------------------------------
+
+/** An intent with no tokenised stock, selling 1,234,567 units. */
+const CRYPTO_INTENT = { srcChainKey: "hedera", inputToken: HEDERA_USDC, dstChainKey: "0x2105.base", outputToken: QUOTE_HBAR_BASE.tokenDst,
+  inputAmount: "1234567", minOutputAmount: "1", deadline: "1800000300", allowPartialFill: false };
+const sentTo = (s: Awaited<ReturnType<typeof serve>>, p: string) => s.calls.filter((c) => c.url.endsWith(`/${p}`)).at(-1)!.body as Record<string, unknown>;
+
+test("a split pins an amount to the splitter on the quote and the four intent routes, from the amount sold, rounded down", async (t) => {
+  const s = await serve({ input: SPLIT, allowList: ALLOW_LIST }); t.after(s.close);
+  const client = { partnerFee: { address: ELSEWHERE, percentage: 100 }, hook: { kind: "deposit", to: ELSEWHERE } };
+  // 50,000,000,000 sold × 975 ÷ 100,000 = 487,500,000, with no percentage alongside.
+  assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, ...client })).status, 200);
+  assert.deepEqual(sentTo(s, "swaps/quote"), { ...QUOTE_HBAR_BASE, partnerFee: { address: SPLITTER, amount: "487500000" } });
+  // 1,234,567 × 975 ÷ 100,000 = 12,037.03, so 12,037.
+  for (const p of ["swaps/allowance/check", "swaps/approve", "swaps/intents", "swaps/limit-orders"]) {
+    assert.equal((await s.post(`/sodax/${p}`, { ...CRYPTO_INTENT, ...client })).status, 200, p);
+    assert.deepEqual(sentTo(s, p), { ...CRYPTO_INTENT, partnerFee: { address: SPLITTER, amount: "12037" } }, p);
+  }
+  // A route that carries no fee gets none.
+  assert.equal((await s.post("/sodax/swaps/intents/status", { txHash: "0xabc" })).status, 200);
+  assert.deepEqual(sentTo(s, "swaps/intents/status"), { txHash: "0xabc" });
+});
+
+test("a split pins nothing while the fee rounds down to 0, and 1 unit from the first amount that reaches it", async (t) => {
+  const s = await serve({ input: SPLIT, allowList: ALLOW_LIST }); t.after(s.close);
+  // 102 × 975 = 99,450, under 100,000; 103 × 975 = 100,425.
+  for (const amount of ["0", "1", "102"]) {
+    assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount, partnerFee: { address: ELSEWHERE, amount: "5" } })).status, 200);
+    assert.equal("partnerFee" in sentTo(s, "swaps/quote"), false, amount);
+  }
+  await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount: "103" });
+  assert.deepEqual(sentTo(s, "swaps/quote").partnerFee, { address: SPLITTER, amount: "1" });
+});
+
+test("a split refuses a fee route whose amount sold it can't read (400 BAD_AMOUNT) before SODAX sees it", async (t) => {
+  const s = await serve({ input: SPLIT, allowList: ALLOW_LIST }); t.after(s.close);
+  for (const value of [undefined, null, 50000000, ["1"], "", "-1", "+1", "1.5", "01", "1e6", " 1", "1 ", "0x10", "١", "1".repeat(79)]) {
+    const label = value === undefined ? "missing" : JSON.stringify(value);
+    const quote = await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount: value });
+    assert.equal(quote.status, 400, `quote, ${label}`);
+    assert.deepEqual(await quote.json(), { error: { code: "BAD_AMOUNT",
+      message: "Expected amount as a whole number of the token's smallest units, written in digits." } }, label);
+    const intent = await s.post("/sodax/swaps/intents", { ...CRYPTO_INTENT, inputAmount: value });
+    assert.equal(intent.status, 400, `intent, ${label}`);
+    assert.match((await json<ErrorBody>(intent)).error.message, /^Expected inputAmount /, label);
+  }
+  assert.equal(s.calls.filter((c) => !c.url.endsWith("/swaps/tokens")).length, 0, "only the token list was read");
+  // 78 digits, as many as a uint256 has, are read.
+  assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount: "9".repeat(78) })).status, 200);
+  // A plain fee works nothing out from the amount, and leaves it to SODAX as before.
+  const plain = await serve(); t.after(plain.close);
+  assert.equal((await plain.post("/sodax/swaps/quote", { ...QUOTE_HBAR_BASE, amount: "1.5" })).status, 200);
+  assert.deepEqual(sentTo(plain, "swaps/quote").partnerFee, { address: RECEIVER, percentage: 30 });
+});
+
+test("/config publishes the split: the splitter, each party's name and rate per 100,000, and the fee on stock swaps", async (t) => {
+  const s = await serve({ input: SPLIT, allowList: ALLOW_LIST }); t.after(s.close);
+  const config = await json<Record<string, unknown>>(await s.get("/config"));
+  assert.deepEqual([config.partnerFeeBps, config.feeReceiver], [0, null], "the plain fee's fields stay, empty");
+  // Without brand.operator, the operator is named by brand.name, as in the wallet window.
+  assert.deepEqual(config.feeSplit, { receiver: SPLITTER, totalRate: 975, platform: { name: "Example Platform", rate: 875 },
+    operator: { name: "ExClip", rate: 100 }, stockFee: null });
+
+  const own = await serve({ input: { ...SPLIT, brand: { operator: "Example Operator Ltd" }, fees: { split: { ...SPLIT_OF, stockFeeBps: 25 } } },
+    allowList: ALLOW_LIST });
+  t.after(own.close);
+  assert.deepEqual((await json<Record<string, unknown>>(await own.get("/config"))).feeSplit, { receiver: SPLITTER, totalRate: 975,
+    platform: { name: "Example Platform", rate: 875 }, operator: { name: "Example Operator Ltd", rate: 100 }, stockFee: { receiver: OPERATOR, bps: 25 } });
 });
 
 // ---- caches -----------------------------------------------------------------------------------------------
@@ -336,9 +424,10 @@ const STOCKS = { enabled: true, countryHeader: "cf-ipcountry", blockedCountries:
 const via = (country: string, extra: Record<string, string> = {}) => ({ "cf-ipcountry": country, "x-exclip-edge-secret": EDGE, ...extra });
 type EligibilityBody = { eligible: boolean; code: string | null; message: string | null; country: string | null; termsVersion: string | null; expiresAt: string | null };
 
-function stocksOn(o: { stocks?: ExclipConfigInput["stocks"]; input?: ExclipConfigInput; env?: Env; clock?: { t: number };
+function stocksOn(o: { stocks?: ExclipConfigInput["stocks"]; input?: ExclipConfigInput; env?: Env; allowList?: FeeAllowList; clock?: { t: number };
   route?: (url: string, call: Call) => Reply | undefined; stocksLimit?: express.RequestHandler } = {}) {
-  return serve({ input: { ...o.input, stocks: { ...STOCKS, ...o.stocks } }, env: { ...STOCK_ENV, ...o.env }, clock: o.clock, route: o.route, stocksLimit: o.stocksLimit });
+  return serve({ input: { ...o.input, stocks: { ...STOCKS, ...o.stocks } }, env: { ...STOCK_ENV, ...o.env }, allowList: o.allowList, clock: o.clock,
+    route: o.route, stocksLimit: o.stocksLimit });
 }
 
 /** Confirms every statement from `country` and returns the attestation the app keeps. */
@@ -552,6 +641,33 @@ test("stocks in every state: a crypto-only swap is untouched, and the stock chec
   assert.equal(asked, 0);
   assert.equal((await proxy.handle("POST", "swaps/quote", {}, QUOTE_USDC_NVDA, ask)).status, 451);
   assert.equal(asked, 1);
+});
+
+test("stocks on with a split: a stock on either side never pays the splitter, only the operator's own fee or none", async (t) => {
+  const own = await stocksOn({ input: { ...SPLIT, fees: { split: { ...SPLIT_OF, stockFeeBps: 25 } } }, allowList: ALLOW_LIST }); t.after(own.close);
+  const none = await stocksOn({ input: SPLIT, allowList: ALLOW_LIST }); t.after(none.close);
+  const buys = { srcChainKey: "hedera", inputToken: HEDERA_USDC, dstChainKey: "hedera", outputToken: HEDERA_AAPL,
+    inputAmount: "50000000", minOutputAmount: "1", deadline: "1800000300", allowPartialFill: false };
+  const sells = { ...buys, inputToken: HEDERA_AAPL, outputToken: HEDERA_USDC };
+  // A client that names the splitter on a stock swap is overruled like any other.
+  const client = { partnerFee: { address: SPLITTER, amount: "487500" } };
+  for (const [s, fee] of [[own, { address: OPERATOR, percentage: 25 }], [none, null]] as const) {
+    const label = fee ? "the operator's own fee" : "no fee";
+    const headers = via("DE", { [ATT]: await attestationFrom(s, "DE") });
+    assert.equal((await s.post("/sodax/swaps/quote", { ...QUOTE_USDC_NVDA, ...client }, headers)).status, 200, label);
+    for (const body of [buys, sells]) assert.equal((await s.post("/sodax/swaps/intents", { ...body, ...client }, headers)).status, 200, label);
+    const stockSwaps = s.calls.filter((c) => c.method === "POST");
+    assert.equal(stockSwaps.length, 3, label);
+    for (const c of stockSwaps) {
+      const body = c.body as Record<string, unknown>;
+      assert.deepEqual(body.partnerFee, fee ?? undefined, `${label}: ${c.url}`);
+      assert.equal("partnerFee" in body, fee !== null, `${label}: ${c.url}`);
+      assert.ok(!JSON.stringify(body).toLowerCase().includes(SPLITTER.toLowerCase()), `${label}: ${c.url}`);
+    }
+    // A crypto swap on the same server pays the split.
+    assert.equal((await s.post("/sodax/swaps/quote", QUOTE_HBAR_BASE, headers)).status, 200, label);
+    assert.deepEqual(sentTo(s, "swaps/quote").partnerFee, { address: SPLITTER, amount: "487500000" }, label);
+  }
 });
 
 test("stocks on: a token list that can't be read refuses stock and crypto legs alike (503), even when confirmed", async (t) => {

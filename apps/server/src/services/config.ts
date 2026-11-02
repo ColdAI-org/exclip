@@ -8,6 +8,23 @@ export const COINGECKO_PRO_BASE = "https://pro-api.coingecko.com/api/v3";
 
 export type PartnerFee = { address: string; percentage: number };
 
+/** fees.split (docs/fee-split.md), as the proxy pins it and /config publishes it. */
+export type ServerFeeSplit = {
+  /** Where the fee on a swap without a tokenised stock goes: the operator's splitter. */
+  splitter: string;
+  /** The platform's rate and the operator's together, per 100,000 of the amount sold. */
+  totalRate: number;
+  /** The platform's name comes from its factory's entry in the allow-list, never from code. */
+  platformName: string;
+  platformRate: number;
+  /** brand.operator, or brand.name when that is empty: the name the wallet window shows (apps/wallet/src/config.ts). */
+  operatorName: string;
+  operatorRate: number;
+  /** What is pinned on a swap with a tokenised stock on either side, which never goes to the splitter: the operator's
+   * own plain fee, or null for none. */
+  stockFee: PartnerFee | null;
+};
+
 export type ServerConfig = {
   /** features.trading: off → every route that builds a transaction answers 403; quotes and status still work. */
   tradingEnabled: boolean;
@@ -31,6 +48,9 @@ export type ServerConfig = {
   sodaxBase: string;
   /** What is pinned on every quote and intent: null unless a receiver is set and the rate is above 0. */
   partnerFee: PartnerFee | null;
+  /** fees.split: an amount to the splitter is pinned instead, worked out from each request (services/sodaxProxy.ts).
+   * The config check never lets partnerFee and feeSplit both be set. */
+  feeSplit: ServerFeeSplit | null;
   coingeckoBase: string;
   coingeckoKey: string | null;
   /** stocks: tokenised stocks (services/stocks.ts). Off: any request with a stock leg answers 451 STOCKS_DISABLED. */
@@ -49,6 +69,7 @@ export type ServerConfig = {
 
 export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: boolean): ServerConfig {
   const walletOrigin = originsFor(config, dev).wallet;
+  const split = config.fees.split;
   return {
     tradingEnabled: config.features.trading,
     embeddedWallet: config.features.embeddedWallet,
@@ -60,6 +81,17 @@ export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: 
     sodaxApiKey: secrets.sodaxApiKey,
     sodaxBase: SODAX_DEFAULT_BASE,
     partnerFee: config.fees.partnerFee ? { ...config.fees.partnerFee } : null,
+    feeSplit: split
+      ? {
+        splitter: split.splitter,
+        totalRate: split.totalRate,
+        platformName: split.platformName,
+        platformRate: split.platformRate,
+        operatorName: config.brand.operator || config.brand.name,
+        operatorRate: split.operatorRate,
+        stockFee: split.stockFee ? { ...split.stockFee } : null,
+      }
+      : null,
     coingeckoBase: secrets.coingeckoApiKey ? COINGECKO_PRO_BASE : COINGECKO_PUBLIC_BASE,
     coingeckoKey: secrets.coingeckoApiKey,
     stocks: {
@@ -74,13 +106,24 @@ export function serverConfig(config: ExclipConfig, secrets: ExclipSecrets, dev: 
 }
 
 /** What the browser may know: switches, the fee rate and receiver it will be shown, the wallet origin and the terms
- * version users confirm for tokenised stocks; never a key or a secret. */
+ * version users confirm for tokenised stocks; never a key or a secret. With a split, partnerFeeBps is 0, feeReceiver
+ * is null, and feeSplit has the receiver, each party's name and rate per 100,000, and the fee on stock swaps. */
 export function publicConfig(config: ServerConfig) {
+  const split = config.feeSplit;
   return {
     tradingEnabled: config.tradingEnabled,
     sodaxConfigured: config.sodaxApiKey !== null,
     partnerFeeBps: config.partnerFee?.percentage ?? 0,
     feeReceiver: config.partnerFee?.address ?? null,
+    feeSplit: split
+      ? {
+        receiver: split.splitter,
+        totalRate: split.totalRate,
+        platform: { name: split.platformName, rate: split.platformRate },
+        operator: { name: split.operatorName, rate: split.operatorRate },
+        stockFee: split.stockFee ? { receiver: split.stockFee.address, bps: split.stockFee.percentage } : null,
+      }
+      : null,
     embeddedWallet: config.embeddedWallet,
     walletOrigin: config.embeddedWallet ? config.walletOrigin : null,
     unbackedLimitUsd: config.unbackedLimitUsd,

@@ -151,7 +151,7 @@ test("createApp with memory stores answers /api/exclip/config: the defaults, no 
   const r = await s.get("/api/exclip/config");
   assert.equal(r.status, 200);
   assert.deepEqual(bodyOf(r), {
-    tradingEnabled: true, sodaxConfigured: false, partnerFeeBps: 0, feeReceiver: null,
+    tradingEnabled: true, sodaxConfigured: false, partnerFeeBps: 0, feeReceiver: null, feeSplit: null,
     embeddedWallet: true, walletOrigin: WALLET_ORIGIN, unbackedLimitUsd: 100, stocksEnabled: false, stocksTermsVersion: null,
   });
   assert.equal(r.headers["cache-control"], "public, max-age=30");
