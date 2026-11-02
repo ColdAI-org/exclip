@@ -140,10 +140,9 @@ line, and it should say in its description why the change is needed.
   Changes must keep the protections described in
   [docs/embedded-wallet.md](docs/embedded-wallet.md). Tightening a limit
   needs no discussion. Loosening one needs an issue and agreement first.
-  The fee split's limits were decided by the owner on 2 November 2026 in
-  place of an issue: the wallet's 1 % cap holds the operator's rate in a
-  split, and a split's total may reach its factory's listed cap
-  ([the owner's decisions](docs/fee-split.md#the-owners-decisions)).
+  In a fee split, the wallet's 1 % cap holds the operator's rate, and the
+  split's total may reach its factory's listed cap
+  ([the wallet](docs/fee-split.md#the-wallet)).
 - **The fee split's code**: the contracts in `contracts/fee-split`, which
   hold the fee; `packages/config/src/fee-split.ts`, which works out where a
   split's fee goes and checks the allow-list; and

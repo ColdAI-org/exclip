@@ -1,9 +1,10 @@
 # Fee split
 
-One SODAX partner fee, paid to two parties: the platform and the operator
-of a DEX. The platform fee is 0.875 % of the amount sold, paid to ColdAI
-LLC, on every DEX launched through ColdAI. Swaps of tokenised stocks carry
-none. An operator may add a fee of its own.
+One SODAX partner fee, paid to two parties: a platform and the operator
+of a DEX. The platform's rate is the same on every DEX that uses its
+factory: 0.875 % of the amount sold with the deploy script's default.
+Swaps of tokenised stocks carry no platform fee. An operator may add a
+fee of its own.
 
 SODAX pays a partner fee to one address. For a split, that address is a
 contract, a splitter, which holds the fee and pays each party its share. A
@@ -24,8 +25,7 @@ repository deploys no contract.
 This page starts with how SODAX pays a partner fee, which decides how a
 split can work. Then it covers how the split works, an example, what the
 contracts guarantee, how a payee collects, deploying the factory, how
-ExClip uses the split, the owner's decisions, and the questions still
-open.
+ExClip uses the split, its known limitations, and the open questions.
 
 ## How SODAX pays a partner fee
 
@@ -179,7 +179,8 @@ whole number: 875. The operator's 0.1 % is 100.
 
 ## A worked example
 
-Someone sells 1,000 USDC on Sonic, on a DEX whose operator charges 0.1 %.
+Someone sells 1,000 USDC on Sonic, on a DEX whose operator charges 0.1 %,
+under a factory with the deploy script's default platform rate, 0.875 %.
 USDC on Sonic has 6 decimals, so 1,000 USDC is 1,000,000,000 units
 (`apps/wallet/src/sodax/tokens.ts:7`).
 
@@ -272,18 +273,18 @@ The commands are in
 
 ## Deploy the factory
 
-One factory serves every DEX, so it is deployed once, on Sonic. The
-commands are in
+One factory serves every DEX that pays the same platform, so it is
+deployed once, on Sonic. The commands are in
 [`contracts/fee-split/README.md`](../contracts/fee-split/README.md#deploy-to-sonic).
 In short:
 
 1. **Choose the platform's address**: one the platform controls for good,
    such as a multisig, that accepts native S. The scripts and these pages
    name no address. It is a parameter, `PLATFORM_RECEIVER`.
-2. **Choose the rates**: the platform's, `PLATFORM_RATE` (875 by default),
-   and the cap on the total, `MAX_TOTAL_RATE` (1,875, or 1.875 %, by
-   default), which leaves an operator up to 1 %. The owner
-   [decided](#the-owners-decisions) these values.
+2. **Choose the rates**: the platform's, `PLATFORM_RATE` (875, the deploy
+   script's default), and the cap on the total, `MAX_TOTAL_RATE` (1,875,
+   or 1.875 %, the deploy script's default), which leaves an operator up to
+   1 %.
 3. **Simulate** with `forge script` without `--broadcast`, and check every
    value it returns.
 4. **Deploy**, signing with an encrypted keystore or a Ledger. The script
@@ -316,14 +317,14 @@ address and the wallet's signing policy, gets extra review
 | What SODAX is sent | `{ address, percentage }` | `{ address, amount }` | `{ address, amount }` |
 | The receiver | `fees.receiver`, typed in the config | `fees.receiver`, typed in the config | The operator's splitter, worked out, never typed |
 | What the passkey wallet signs | A fee of at most 1 % to an address on its list | A fee of exactly the rate it was built with, to an address on its list | A fee of exactly the total rate, to a splitter it works out itself |
-| The wallet's review | `Acme Ltd fee 3 USDC` | `8.75 USDC · 0.875% to Acme Ltd` | `9.75 USDC · 0.875% to ColdAI · 0.1% to Acme Ltd` |
+| The wallet's review | `Acme Ltd fee 3 USDC` | `8.75 USDC · 0.875% to Acme Ltd` | `9.75 USDC · 0.875% to Platform · 0.1% to Acme Ltd` |
 | A swap with a tokenised stock | The same fee | Its own fee on stock swaps, `fees.stockFeeBps`, or none | The operator's own plain fee, or none |
 
 In the reviews above, a plain fee's "Acme Ltd" is the build's
 `fees.receiverName`, or `brand.name` when that isn't set. A split's is the
-build's `brand.operator`, or `brand.name` when that is empty. "ColdAI" is
-the `platformName` of the factory's entry in the allow-list: no code names
-the platform.
+build's `brand.operator`, or `brand.name` when that is empty. "Platform"
+is the `platformName` of the factory's entry in the allow-list: no code
+names the platform.
 
 ### The config
 
@@ -493,8 +494,10 @@ reviewed commit changes it. A second file, in `packages/config`, would
 need the same review, and could drift from this one.
 
 A DEX that pays the platform's fee lists the platform's factory and its own
-split in its own copy. This repository lists neither
-([the owner's decisions](#the-owners-decisions)).
+split in its own copy. This repository lists neither, and no file here
+names a platform's address, factory or split. Tests and examples use the
+local dry run's factory and placeholder addresses such as `0x1111…1111`
+and `0x2222…2222`.
 
 ### The server
 
@@ -569,8 +572,8 @@ quote and the minimum received came out about one fee low:
 
 So the app quotes the amount sold, for a plain fee as for a split
 (`apps/web/src/components/TradeSheet.tsx:119-122`). SODAX's backend isn't
-public, so this is still a question for SODAX
-([decisions for the owner](#decisions-for-the-owner)).
+public, so this is a question for SODAX
+([open questions](#open-questions)).
 
 ### The app
 
@@ -587,7 +590,7 @@ public, so this is still a question for SODAX
   the review shows the fee the intent carries. With a split, the review
   has one row for each party with a rate above 0, each with its amount
   (`apps/web/src/components/TradeSheet.tsx:280-282`), such as
-  "ColdAI fee (0.875%)" and "Acme Ltd fee (0.10%)". The names come from
+  "Platform fee (0.875%)" and "Acme Ltd fee (0.10%)". The names come from
   `/config`. On a phone, a long row name wraps rather than being cut off
   (`apps/web/src/styles/exclip.css:356`).
 - **A swap with a stock** shows only the operator's own fee, or "None"
@@ -616,10 +619,9 @@ nothing the app sends:
 - **It holds the operator to 1 %.** The wallet's cap
   (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:89`) limits the
   operator's rate in a split (`policy.ts:306`), while the split's total
-  may reach its factory's listed cap
-  ([the owner's decisions](#the-owners-decisions)).
+  may reach its factory's listed cap.
 - **It shows who gets what.** The review's Fees line says, for example,
-  `9.75 USDC · 0.875% to ColdAI · 0.1% to Acme Ltd · network …`, and the
+  `9.75 USDC · 0.875% to Platform · 0.1% to Acme Ltd · network …`, and the
   receiver line names the address as the fee splitter
   (`policy.ts:273-284` and `:404-405`). The platform's name comes from the
   allow-list. The operator's is the build's `brand.operator`, or
@@ -643,8 +645,7 @@ control ([why it fails closed](fees.md#why-it-fails-closed)).
 Swaps of tokenised stocks, the tokens SODAX flags `isRwa`, carry no
 platform fee. A swap counts as one when either side is a stock. On those
 swaps the operator may still charge its own plain fee, `stockFeeBps`, paid
-straight to its own address, or none. Both are the owner's choice of
-2 November 2026 ([the owner's decisions](#the-owners-decisions)).
+straight to its own address, or none.
 
 Stocks are an operator opt-in that ships off
 ([tokenised stocks](tokenised-stocks.md)). The server sends a request with
@@ -684,76 +685,35 @@ When a DEX offers stocks and also uses the split:
 | The platform's name comes from the allow-list | `fee-split.ts:235`, then `apps/server/src/services/config.ts:95` and `policy.ts:282` |
 | The address maths matches the contracts | `packages/config/test/fee-split.test.ts` against the vectors, and `pnpm run splitter-code`, both in CI |
 
-## The owner's decisions
+## Known limitations
 
-The owner decided these, and the code follows them:
-
-1. **The rates.** A DEX launched through ColdAI pays a platform fee of
-   0.875 % of the amount sold (875 per 100,000), through the split. Its
-   operator may take up to 1 % of its own (1,000) on the same swap. The
-   total is at most 1.875 % (1,875), the factory's cap and the deploy
-   script's default. Decided on 2 November 2026. A factory's cap can't
-   change, which is why it had to be settled before the factory is
-   deployed.
-2. **Live once built, not audited.** The split may be used as soon as it
-   is built. These pages and the contracts' README say that it is not
-   audited.
-3. **A neutral repository.** The default config charges no fee. The
-   allow-list's `factories` and `splits` ship empty, and no file here names
-   the platform's receiving address, its factory or a split of it. A copy
-   that pays the platform's fee adds those entries itself. The platform's
-   name on a review comes from the allow-list entry, never from code. Tests
-   and examples use the local dry run's factory and placeholder addresses
-   such as `0x1111…1111` and `0x2222…2222`.
-4. **Tokenised stocks.** A swap with a stock on either side carries no
-   platform fee and never goes to a splitter. On those swaps the operator
-   may still charge its own plain fee, paid straight to its own listed
-   address, or none ([tokenised stocks](#tokenised-stocks)). Decided on
-   2 November 2026.
-5. **The wallet's limit.** The wallet's `MAX_PARTNER_FEE_BPS`
-   (`apps/wallet/src/sodax/chains.ts:89`) and the config's
-   `PARTNER_FEE_MAX_BPS` (`packages/config/src/index.ts:219`) stay at 1 %.
-   They still limit a plain fee. In a split they limit the operator's rate,
-   and the split's total may reach its factory's listed cap. A change to
-   the wallet's fee limit normally needs an issue and agreement first
-   ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)). This
-   one was decided by the owner on 2 November 2026 instead.
-
-## Decisions for the owner
-
-These are open. This page lists them without deciding them.
-
-1. **What SODAX allows.** The repository can't answer these. SODAX can:
-   - whether its backend caps a partner fee, and where. The type's comment
-     says 100 basis points at most, while the SDK accepts up to 10,000
-     ([the two forms](#the-two-forms-of-a-partner-fee)). A split's total
-     may be up to 187.5 basis points;
-   - whether every route ExClip uses takes the amount form, and whether a
-     quote takes a pinned fee off its `amount`, as ExClip now assumes
-     ([the quote](#the-quote));
-   - how the intents contract pays a fee in native S
-     ([where the fee goes](#where-the-fee-goes-and-in-which-token));
-   - whether its terms let a partner share its fee with another party.
-2. **The platform's address.** It is chosen outside this repository:
-   every script and this page take it as a parameter, and no file here
-   names it. It has to be an address ColdAI controls for good, that
-   accepts native S on Sonic. Who deploys the factory is open too.
-3. **How the platform fee holds.** Only the passkey wallet checks where a
-   fee goes. On a DEX whose server someone else runs, browser-wallet swaps
-   carry whatever fee that server pins
-   ([why it fails closed](fees.md#why-it-fails-closed)). The passkey wallet
-   also signs an intent that carries no fee at all, so a copy whose server
-   pins none pays nobody. Whether the platform fee rests on who builds and
-   runs each DEX, on an agreement, or on something else, is open.
-4. **The wallet's stablecoin floor.** The passkey wallet refuses a swap
+1. **Only the passkey wallet checks where a fee goes.** On a DEX whose
+   server someone else runs, browser-wallet swaps carry whatever fee that
+   server pins ([why it fails closed](fees.md#why-it-fails-closed)). The
+   passkey wallet also signs an intent that carries no fee at all, so a
+   copy whose server pins none pays nobody.
+2. **The wallet's stablecoin floor.** The passkey wallet refuses a swap
    between USD stablecoins whose minimum is below 97 % of the amount sold
    (`STABLE_FLOOR_BPS`, `apps/wallet/src/sodax/price.ts:17`). The floor
    was set for a fee of at most 1 % and slippage of at most 1 %. With a
-   split at its cap, 1.875 %, and the app's 1 % slippage setting, even a
-   swap at par comes within a fraction of a percent of the floor, so a
-   pair quoted a little below par is refused. That fails closed: the user
-   can pick a lower slippage. Lowering the floor would loosen a wallet
-   limit, which needs an issue and agreement first
-   ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)), and
-   the decision of 2 November 2026 covered the fee limits only. This
-   change leaves the floor as it was.
+   split at the deploy script's default cap, 1.875 %, and the app's 1 %
+   slippage setting, even a swap at par comes within a fraction of a
+   percent of the floor, so a pair quoted a little below par is refused.
+   That fails closed: the user can pick a lower slippage. Lowering the
+   floor would loosen a wallet limit, which needs an issue and agreement
+   first ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)).
+
+## Open questions
+
+The repository can't answer these. SODAX can:
+
+- whether its backend caps a partner fee, and where. The type's comment
+  says 100 basis points at most, while the SDK accepts up to 10,000
+  ([the two forms](#the-two-forms-of-a-partner-fee)). With the deploy
+  script's default cap, a split's total may be up to 187.5 basis points;
+- whether every route ExClip uses takes the amount form, and whether a
+  quote takes a pinned fee off its `amount`, as ExClip assumes
+  ([the quote](#the-quote));
+- how the intents contract pays a fee in native S
+  ([where the fee goes](#where-the-fee-goes-and-in-which-token));
+- whether its terms let a partner share its fee with another party.

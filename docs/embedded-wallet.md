@@ -225,10 +225,10 @@ therefore checks it against references of its own
 - **USD stablecoin to USD stablecoin:** refused when the minimum is below 97 %
   of the input, fee included. A plain fee (at most 1 %) plus the largest
   slippage setting (1 %) stays above that line. A split's fee may reach its
-  factory's cap, 1.875 %. With that fee and 1 % slippage, even a swap at par
-  comes within a fraction of a percent of the line, so a pair quoted a
-  little below par is refused
-  ([decisions for the owner](fee-split.md#decisions-for-the-owner)).
+  factory's cap: 1.875 % with the deploy script's defaults. With that fee
+  and 1 % slippage, even a swap at par comes within a fraction of a percent
+  of the line, so a pair quoted a little below par is refused
+  ([known limitations](fee-split.md#known-limitations)).
 - **Other pairs:** the popup asks SODAX for a quote itself, with the same call
   the SDK makes. The request carries no address, cookies or referrer. A
   minimum more than 5 % below that quote opens a full-screen warning, with

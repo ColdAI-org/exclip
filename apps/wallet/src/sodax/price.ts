@@ -12,8 +12,8 @@
 import type { Token } from "./policy.ts";
 
 /** Stable↔stable: the minimum must be at least 97% of the gross input (fee ≤ 1% + slippage ≤ 1% + solver 0.1%). A fee
- * split may reach its factory's cap, 1.875%, which leaves almost no room at 1% slippage: an open decision
- * (docs/fee-split.md, "Decisions for the owner"). */
+ * split may reach its factory's cap, 1.875% with the deploy script's defaults, which leaves almost no room at 1%
+ * slippage (docs/fee-split.md, "Known limitations"). */
 export const STABLE_FLOOR_BPS = 9_700n;
 /** Other pairs: warn when the minimum is more than 5% below the reference. */
 export const REFERENCE_FLOOR_BPS = 9_500n;

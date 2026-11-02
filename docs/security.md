@@ -118,7 +118,7 @@ splitter's code, still match the contracts
 - **Only the passkey wallet checks a fee.** A browser wallet signs whatever
   fee the server pins, and the passkey wallet also signs an intent with no
   fee. A fee split's platform fee holds only where the server pins it
-  ([decisions for the owner](fee-split.md#decisions-for-the-owner)).
+  ([known limitations](fee-split.md#known-limitations)).
 - **The proxy is public.** The API has no login, so anyone can call the
   allow-listed SODAX routes through your server, with your key, within the
   per-address rate limits. Watch your SODAX usage.
