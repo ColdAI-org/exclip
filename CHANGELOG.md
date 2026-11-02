@@ -81,15 +81,40 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     SODAX's token list.
 - `contracts/fee-split`, two Solidity contracts that split one SODAX
   partner fee between the platform and a DEX's operator, on Sonic, with
-  tests and a deploy script. They are not audited, not deployed, and not
-  used by the app, the server or the wallet yet. `docs/fee-split.md`
-  explains how SODAX pays a partner fee, how the split works, and how
-  ExClip would use it.
+  tests and a deploy script. They are not audited and not deployed.
+  `docs/fee-split.md` explains how SODAX pays a partner fee, how the split
+  works, and how ExClip uses it.
+- A fee split, which ships off: one partner fee, sent to the operator's
+  splitter, that pays a platform's rate and the operator's own, each per
+  100,000 of the amount sold. It is not audited
+  ([fee split](docs/fee-split.md)):
+  - `fees.split` in `exclip.config.ts` (`factory`, `operator`,
+    `operatorRate` and `stockFeeBps`). The config check takes the factory's
+    values from the fee allow-list, refuses what the factory would refuse,
+    and refuses a config that sets both a plain fee and a split;
+  - `factories` and `splits` in `apps/wallet/fee-receivers.json`, both
+    shipped empty. A reviewer reads a factory's values from the chain;
+  - `packages/config/src/fee-split.ts`, which works out a splitter's
+    address as the factory does, tested against vectors the real factory
+    gave on anvil, and `pnpm run splitter-code`, which checks its splitter
+    code against the compiled factory;
+  - in the SODAX proxy, the split's fee pinned as an amount to the splitter
+    on every quote and intent, worked out from the amount sold, and
+    `400 BAD_AMOUNT` for a request it can't work the fee out from;
+  - `feeSplit` in `/api/exclip/config`;
+  - in the app, a review row for each party, with its rate and amount;
+  - in the passkey wallet, a split's fee signed only to the splitter the
+    wallet works out itself, at exactly the split's rates, with a review
+    that names each party. Its build stops on an allow-list it can't vouch
+    for, and warns when the config's split isn't listed;
+  - on a swap with a tokenised stock on either side, never the splitter:
+    the operator's own fee (`stockFeeBps`), or none.
 - A second CI job, `contracts: forge, slither`, for `contracts/fee-split`:
   formatting, build and tests, the vectors and the splitter code checked
   against the compiled contracts, and Slither, which fails on any finding.
   It runs on pushes to `main` and on pull requests that change the
-  contracts, and shows as skipped on any other pull request.
+  contracts, the splitter code or the workflow, and shows as skipped on any
+  other pull request.
 
 ### Changed
 
@@ -106,6 +131,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   says where each icon comes from.
 - `SECURITY.md` and the self-hosting guide no longer mention test networks:
   ExClip trades on live networks only.
+- The app asks for a quote on the amount sold, for a plain fee as for a
+  split. It used to ask on the amount after the fee while the server pinned
+  the fee on that quote too, which counts the fee twice if SODAX takes a
+  pinned fee off a quote's amount, as its SDK and API documentation say
+  ([the quote](docs/fee-split.md#the-quote)).
+- The app passes each swap's fee to the SDK with the swap, instead of
+  giving the SDK one fee for every swap.
+- `apps/wallet/fee-receivers.json` has three lists: `receivers`, as before,
+  and `factories` and `splits`. One parser checks it and refuses an unknown
+  key. The server and both builds read it, and each stops on a broken file;
+  only the wallet's build read it before.
 
 ### Fixed
 

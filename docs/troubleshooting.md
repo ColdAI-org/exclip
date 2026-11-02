@@ -26,6 +26,11 @@ start again. `pnpm build` runs the same checks and stops on the same lines.
 | `unknown setting …` | A typo, or a setting this version doesn't have. Compare your file with `exclip.config.example.ts`. |
 | `origins.wallet needs a host of its own: …` | Put the wallet on a host that the app isn't on or under, such as `wallet.example.org` beside `example.org` ([origins](configuration.md#origins)). |
 | `fees.receiver is required when fees.partnerFeeBps is above 0` | Set the receiver, or set the fee back to `0` ([turn a fee on](fees.md#turn-a-fee-on)). |
+| `fees.split.factory 0x… is not listed in apps/wallet/fee-receivers.json: …` | Check the address. A factory is listed under `factories` in a reviewed commit, with the values read from the chain ([the fee allow-list](fee-split.md#the-fee-allow-list)). |
+| `fees.split can't be set with fees.partnerFeeBps or fees.receiver: …` | A config sets a plain fee or a split, never both. Remove one ([a fee split](fees.md#a-fee-split)). |
+| `fees.split.operatorRate must be a whole number from 0 to 1000` | The rate is per 100,000 of the amount sold: `100` is 0.1 %, and `1000`, 1 %, is the most. |
+| `fees.split: …` ending `(ZeroAddress)`, `(OperatorIsPlatform)`, `(RateTooHigh)` or `(ZeroRates)` | The factory would refuse this split, so its splitter could never exist. The message says why ([the config](fee-split.md#the-config)). |
+| `fee-receivers.json: …` | The fee allow-list is broken. The server and both builds read it, and each stops on it. The message names the entry ([below](#the-build-fails-or-warns)). |
 | `… must be a #RRGGBB colour`, `… must be an https URL or null` and the like | The message gives the format. [Configuration](configuration.md) lists each setting. |
 | `stocks.countryHeader is required when stocks.enabled is true: …` | Set the header your reverse proxy puts the visitor's country in ([the reverse proxy](tokenised-stocks.md#the-reverse-proxy)), or set `stocks.enabled: false`. |
 | `EXCLIP_EDGE_SECRET is required when stocks.enabled is true: …` or `EXCLIP_ATTESTATION_SECRET must be at least 32 characters …` | Put both secrets in the server's environment ([switching them on](tokenised-stocks.md#switching-them-on)), or set `stocks.enabled: false`. Only the server checks these; the build doesn't need them. |
@@ -90,13 +95,15 @@ a higher port, and let the reverse proxy take 80 and 443
 | Message | What to do |
 |---|---|
 | `brand.logo is /acme.svg, but apps/web/public/acme.svg doesn't exist` | Put the file in `apps/web/public`, or fix the path ([the logo](branding.md#the-logo)). |
-| `fee-receivers.json: not an address: …`, `"receivers" must be an array` or `duplicate receiver` | Fix `apps/wallet/fee-receivers.json`: an array of addresses, each `0x` and 40 hex digits, each listed once. |
+| `fee-receivers.json: not an address: …`, `"receivers" must be an array` or `duplicate receiver` | Fix `apps/wallet/fee-receivers.json`: `receivers` is an array of addresses, each `0x` and 40 hex digits, each listed once. |
+| `fee-receivers.json: factories[0]: …` or `fee-receivers.json: splits[0]: …` | Fix that entry. A factory's values are the ones its reviewer read from the chain, and its `initCodeHash` must be the one its address gives. A split names a listed factory, and an operator and rate that factory accepts ([the fee allow-list](fee-split.md#the-fee-allow-list)). |
+| `fee-receivers.json: the file: unknown key "…"` | The file has `$comment`, `receivers`, `factories` and `splits`, and nothing else. |
 | `inline <script> in index.html`, `inline style in index.html` or `external URL in index.html` | Someone edited `apps/wallet/index.html`. The wallet's CSP runs no inline code, and its page loads files only from its own origin, so put the code in `apps/wallet/src`. |
 | `index.html has an inline <script>, which the CSP (script-src 'self') blocks`, and the app's other `index.html` checks | The same for `apps/web/index.html`. |
 | `FATAL ERROR: Ineffective mark-compacts near heap limit` … `JavaScript heap out of memory` | The app's build needs about 2.6 GB of heap, and on a machine with less than 16 GB of memory Node allows about 2 GB by default. Run `NODE_OPTIONS=--max-old-space-size=4096 pnpm build`, with about 4 GB of memory free. |
 
-The wallet build also warns about two settings it accepts but that won't
-work as you meant:
+The wallet build also warns about settings it accepts but that won't work
+as you meant:
 
 - `exclip.config.ts: origins are still the examples (…), which nobody can
   serve: this build works nowhere.` Set `origins.app` and `origins.wallet`.
@@ -105,6 +112,14 @@ work as you meant:
   every swap that carries a fee.` Add the receiver in a reviewed commit
   and rebuild the wallet, or set the fee to `0`
   ([why it fails closed](fees.md#why-it-fails-closed)).
+- `exclip.config.ts: the fee split goes to the splitter 0x… (operator 0x…,
+  operatorRate …), whose split apps/wallet/fee-receivers.json does not
+  list under "splits": …` Add the split under `splits` in a reviewed
+  commit and rebuild the wallet ([turn a split on](fees.md#turn-a-split-on)).
+- `exclip.config.ts: the fee on swaps with a tokenised stock goes to 0x…,
+  which apps/wallet/fee-receivers.json does not list under "receivers":
+  …` Add the operator's address under `receivers`, or set
+  `fees.split.stockFeeBps` to `0`.
 
 The builds also print notices about the libraries they bundle, such as
 modules "externalized for browser compatibility", `/*#__PURE__*/` comments
@@ -232,6 +247,9 @@ The start-up lines say what the server runs with:
 [exclip] trading on; partner fee none
 [exclip] tokenised stocks: off
 ```
+
+With a fee split, the fee's line names the splitter and each party's rate
+([the server](fee-split.md#the-server)).
 
 [Monitoring](self-hosting.md#monitoring) lists the alert codes the server
 logs while it runs, and what each one means.

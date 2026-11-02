@@ -45,9 +45,10 @@ works only in a development build.
 | Path | What it holds |
 |---|---|
 | `apps/web` | The app: React and Vite. `src/pages` and `src/components` are the screens; `src/lib` is the logic (the catalogue, the trade flow, the wallet runtime, formatting) |
-| `apps/wallet` | The passkey wallet popup: plain TypeScript and Vite. `src/sodax` holds its signing policy, price checks and the networks and tokens it knows. `fee-receivers.json` is its fee allow-list |
+| `apps/wallet` | The passkey wallet popup: plain TypeScript and Vite. `src/sodax` holds its signing policy, price checks and the networks and tokens it knows. `fee-receivers.json` is its fee allow-list: plain receivers, fee-split factories and splits |
 | `apps/server` | The server: Express 5. `src/routes` for the API, `src/services` for the SODAX proxy, market data and wallet backups, `migrations` for Postgres |
-| `packages/config` | `exclip.config.ts`: its types, defaults and checks, what each build may see, and both origins' security headers |
+| `packages/config` | `exclip.config.ts`: its types, defaults and checks, what each build may see, and both origins' security headers. Also the fee split's address and rates, in `src/fee-split.ts` and `src/fee-rates.ts` |
+| `contracts/fee-split` | The fee-split contracts, with Foundry: the factory, the splitter, their tests and scripts, and the vectors ExClip is tested against ([fee split contracts](../contracts/fee-split/README.md)) |
 | `packages/clip-wallet-core`, `packages/clip-wallet-vault` | Clip Wallet's packages, vendored under the same Apache-2.0 licence. Fix them upstream, not here |
 | `brand` | The brand kit: hand-written SVGs and the review sheet ([brand kit](../brand/README.md)) |
 | `tools` | The scripts behind `pnpm run brand`, `pnpm run screenshots` and `pnpm run docs:links` |
@@ -105,16 +106,18 @@ It runs on every push to `main` and every manual run. On a pull request it
 runs when the pull request changes `contracts/fee-split/`,
 `packages/config/src/fee-split.ts`, the script behind
 `pnpm run splitter-code` or the workflow. On any other pull request it
-shows as skipped.
+shows as skipped: a small job, `changes`, decides, so the check is skipped
+rather than missing.
 
 ## Tests
 
 | Package | Runner | What the tests cover |
 |---|---|---|
-| `packages/config` | `tsx --test` | Defaults, every check, the environment overrides, the stock settings and their secrets, what each build may see |
-| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, the stock check and the stock routes, rate limits, storage and migrations, the wallet's backup API, serving the builds, a start on a port that's taken |
-| `apps/web` | `tsx --test` | The build config, the catalogue, formatting, the passkey wallet's trade flow on the app's side, the page's CSP check, the Stocks screen and where the self-certification goes |
-| `apps/wallet` | `tsx --test` | The signing policy, price checks, the hub account, the message protocol, storage, passkeys, the build config, stocks in a build with them on and off |
+| `packages/config` | `tsx --test` | Defaults, every check, the environment overrides, the stock settings and their secrets, what each build may see, the fee allow-list, and the splitter's address against the contracts' vectors |
+| `apps/server` | `node --test` | The SODAX proxy and the key's redaction, fee pinning, a fee split's amount, the stock check and the stock routes, rate limits, storage and migrations, the wallet's backup API, serving the builds, a start on a port that's taken |
+| `apps/web` | `tsx --test` | The build config, the catalogue, formatting, each swap's fee, the passkey wallet's trade flow on the app's side, the page's CSP check, the Stocks screen and where the self-certification goes |
+| `apps/wallet` | `tsx --test` | The signing policy, fee splits, price checks, the hub account, the message protocol, storage, passkeys, the build config, stocks in a build with them on and off |
+| `contracts/fee-split` | `forge test` | The factory and the splitter, with fuzzing and invariants ([test](../contracts/fee-split/README.md#test)). Not part of `pnpm test`: CI's second job runs them |
 
 The tests need no network, database or Redis. The server's tests run it on
 a local port, with memory stores and a stubbed upstream that answers with
@@ -223,8 +226,8 @@ of its aliases ([tokenised stocks](tokenised-stocks.md#what-users-see)).
 
 ## Change the wallet's rules
 
-The passkey wallet's signing policy, price checks and fee allow-list
-decide what people can sign. [Contributing](../CONTRIBUTING.md#changes-that-get-extra-review)
+The passkey wallet's signing policy, price checks and fee allow-list, and
+the fee split's code it uses, decide what people can sign. [Contributing](../CONTRIBUTING.md#changes-that-get-extra-review)
 lists the files and the review they need, and
 [the embedded wallet design](embedded-wallet.md) explains each protection.
 Two rules catch people out:

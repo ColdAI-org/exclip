@@ -62,7 +62,8 @@ origins' rules.
    full-screen warning.
 4. It shows its own review, built from what it decoded: the network, what
    you pay, what you receive at least, the receiving address, the fees and
-   the nonce.
+   the nonce. When a fee is split, the review says who gets what, such as
+   `9.75 USDC · 0.875% to Platform · 0.1% to Acme Ltd`.
 5. You approve with your passkey. The window unlocks the keys, signs, locks
    again, wipes what it unlocked and closes.
 6. The app sends the signed transactions to the network, one at a time.
@@ -136,4 +137,7 @@ signature, which the server checks against the stored public key.
 - **Set the limits.** `wallet.unbackedLimitUsd`, `wallet.maxBackupVersions`
   and `wallet.dailyNewPasskeys` are in [configuration](configuration.md#wallet).
 - **Fees fail closed.** The wallet signs a swap with a partner fee only when
-  the receiver is in `apps/wallet/fee-receivers.json` ([fees](fees.md)).
+  `apps/wallet/fee-receivers.json` lets it: a plain fee to a listed
+  receiver, or a [fee split](fee-split.md#the-wallet)'s exact fee to the
+  splitter of a listed split, which the wallet works out itself
+  ([fees](fees.md)).

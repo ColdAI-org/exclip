@@ -73,7 +73,9 @@ of every problem.
 - **The app's texts**, such as "Acme Swap never holds your funds" and the
   home page's "New on Acme Swap".
 - **The trade review's fee row:** "Acme Swap fee: None", or the rate and
-  the amount when you charge a fee ([fees](fees.md)).
+  the amount when you charge a fee ([fees](fees.md)). With a fee split,
+  one row for the platform and one for you, under your operator, or the
+  name when there is none ([fee split](fee-split.md#the-app)).
 - **The activity export**, named `acme-swap-activity-<date>.csv`: the name
   in lower case, with each run of other characters turned into a dash. A
   name with no letters or digits from `a` to `z` and `0` to `9` gives

@@ -46,7 +46,8 @@ Then edit `exclip.config.ts`:
 - `brand`: your product name, who runs it (`operator`), your logo, and links
   to your terms and privacy notice. "ExClip" and its logo are not licensed
   for your deployment (see [NOTICE](../NOTICE)).
-- `fees`: leave `partnerFeeBps` at `0` for a first deployment.
+- `fees`: leave `partnerFeeBps` at `0`, and `split` unset, for a first
+  deployment.
 - `server.trustProxy`: the number of proxies in front of the server (see
   [Proxies and client addresses](#proxies-and-client-addresses)).
 
@@ -70,11 +71,14 @@ by default on a machine with less than 16 GB. There, build with
 
 - A production wallet build stops if an origin isn't an exact `https`
   origin, or if the app origin shares the wallet's host.
-- It warns while the origins are still the examples, and when a partner fee
-  goes to a receiver that `apps/wallet/fee-receivers.json` doesn't list.
+- It warns while the origins are still the examples, and when a fee goes
+  where `apps/wallet/fee-receivers.json` doesn't let it: a partner fee's
+  receiver, or a fee split's split, that the file doesn't list.
+- Both builds, and the server, stop if `fee-receivers.json` is broken.
 - Rebuild both apps after you change `origins`, `brand` or
-  `wallet.unbackedLimitUsd`. Rebuild the wallet after a change to
-  `fee-receivers.json`.
+  `wallet.unbackedLimitUsd`. After a change to `fee-receivers.json`,
+  rebuild the wallet, and restart the server, which checks a fee split
+  against the file when it starts.
 
 Build the wallet in CI from a reviewed commit, not on a laptop. Record the
 hash of every file in `apps/wallet/dist`, and deploy exactly those files
@@ -402,8 +406,10 @@ EXCLIP_DISABLE_TRADING=1 EXCLIP_DISABLE_EMBEDDED_WALLET=1
    developer tools open: the `POST` to
    `https://api.sodax.com/v1/intent/quote` and the call to
    `https://rpc.soniclabs.com` must both succeed. Check that:
-   - the review shows the fee you configured (none by default);
-   - the popup's review lists only the network fee;
+   - the review shows the fee you configured (none by default), and with a
+     fee split, a row for each party;
+   - the popup's review lists only the network fee, or with a fee, the fee
+     and who gets it;
    - the status reaches done and the funds arrive.
 4. **Tokenised stocks, if you offer them.** If `stocks.enabled` is on, keep
    `EXCLIP_DISABLE_STOCKS=1` through the steps above. Once trading works,
@@ -423,12 +429,14 @@ curl -s https://swap.example.org/api/exclip/config
 The answer holds public settings only:
 
 ```json
-{"tradingEnabled":true,"sodaxConfigured":true,"partnerFeeBps":0,"feeReceiver":null,"embeddedWallet":true,"walletOrigin":"https://wallet.example.org","unbackedLimitUsd":100,"stocksEnabled":false,"stocksTermsVersion":null}
+{"tradingEnabled":true,"sodaxConfigured":true,"partnerFeeBps":0,"feeReceiver":null,"feeSplit":null,"embeddedWallet":true,"walletOrigin":"https://wallet.example.org","unbackedLimitUsd":100,"stocksEnabled":false,"stocksTermsVersion":null}
 ```
 
 - `sodaxConfigured` must be `true`.
 - `partnerFeeBps` and `feeReceiver` must be what you configured: `0` and
-  `null` unless you set a fee.
+  `null` unless you set a plain fee. `feeSplit` is `null` unless you set a
+  fee split. Then it names your splitter, the platform and you, with each
+  rate ([`GET /config`](api.md#get-config)).
 - `walletOrigin` must be your wallet origin, or `null` while the wallet is
   switched off.
 - `stocksEnabled` must be `false` unless you switched tokenised stocks on.
@@ -531,7 +539,8 @@ never its body, with the SODAX key redacted.
 
 1. Read `CHANGELOG.md` and the diff. Take extra care with the files listed in
    [CONTRIBUTING.md](../CONTRIBUTING.md): `apps/wallet/fee-receivers.json`,
-   `apps/wallet/src/`, the message protocol and the security headers.
+   `apps/wallet/src/`, the fee split's code, the message protocol and the
+   security headers.
 2. `pnpm install --frozen-lockfile` and `pnpm build`. With Docker, build a
    new image instead.
 3. Apply new migrations, then restart the server (`systemctl restart

@@ -14,7 +14,9 @@ the validation are in `packages/config/src/index.ts`.
 The file is checked when the server starts and when the app and the wallet
 are built. An unknown setting (a typo) or an invalid value stops the start or
 the build, with a list of every problem. ExClip does not run with a fee, an
-origin or a switch that nobody asked for.
+origin or a switch that nobody asked for. Each check also reads the fee
+allow-list, `apps/wallet/fee-receivers.json`, and stops if that file is
+broken: a [fee split](#fees) is checked against it.
 
 Node 24 loads the file as it is. Keep to plain values and type annotations:
 no enums or namespaces.
@@ -29,11 +31,13 @@ no enums or namespaces.
 
 A browser bundle never gets a credential. The builds take a projection of the
 public settings (`webBuildConfig` and `walletBuildConfig`), picked field by
-field, and a test checks that no secret can reach them. After you change the
-brand, the origins, `wallet.unbackedLimitUsd` or `stocks.enabled`, rebuild.
-The fee rate, the feature switches, the backup limits and the other stock
-settings need only a server restart. A new fee receiver also needs a change
-to `apps/wallet/fee-receivers.json` and a wallet rebuild (see
+field, and a test checks that no secret can reach them. The wallet's build
+also takes the fee allow-list: its plain receivers, and each listed split's
+terms. After you change the brand, the origins, `wallet.unbackedLimitUsd` or
+`stocks.enabled`, rebuild. The fee rate, the feature switches, the backup
+limits and the other stock settings need only a server restart. A new fee
+receiver or fee split also needs a change to
+`apps/wallet/fee-receivers.json` and a wallet rebuild (see
 [`fees`](#fees)).
 
 ## `sodax`
@@ -48,11 +52,17 @@ to `apps/wallet/fee-receivers.json` and a wallet rebuild (see
 |---|---|---|
 | `fees.partnerFeeBps` | `0` | Partner fee in basis points, a whole number from 0 to 100 (100 = 1 %, the maximum). SODAX takes it from each swap and pays it to the receiver. |
 | `fees.receiver` | `null` | The EVM address that receives the fee. It is required when `partnerFeeBps` is above 0. |
+| `fees.split` | `null` | A [fee split](fee-split.md) instead of a plain fee, never with one. The four settings below. |
+| `fees.split.factory` | none | The fee-split factory's address on Sonic. `apps/wallet/fee-receivers.json` must list it, which fixes the platform's address, its rate and the cap. |
+| `fees.split.operator` | none | The operator's address on Sonic, where its share is paid. |
+| `fees.split.operatorRate` | none | The operator's rate per 100,000 of the amount sold, on top of the platform's: a whole number from 0 to 1,000 (1 %). `100` is 0.1 %. |
+| `fees.split.stockFeeBps` | `0` | The operator's own fee in basis points, 0 to 100, on a swap with a tokenised stock on either side. Those never pay the splitter. It is paid to `operator`, which the wallet's list must then have under `receivers`. |
 
 ExClip charges no fee unless you set one. The server pins the configured fee
 on every quote and intent it forwards, and drops any fee the browser sends.
+A split's fee is worked out for each swap, from the amount sold.
 
-To charge a fee, you need all three of these:
+To charge a plain fee, you need all three of these:
 
 1. Set `fees.partnerFeeBps` and `fees.receiver`.
 2. Add the receiver to `apps/wallet/fee-receivers.json`, in a reviewed
@@ -63,13 +73,21 @@ To charge a fee, you need all three of these:
    ```json
    {
      "$comment": "…",
-     "receivers": ["0xYourReceiverAddress"]
+     "receivers": ["0xYourReceiverAddress"],
+     "factories": [],
+     "splits": []
    }
    ```
 
 3. Check what charging a fee means where you operate. Taking a fee on swaps
    can make you a provider of a financial service, and that is your
    responsibility as the operator.
+
+A split needs the same three, with the factory and the split in the
+allow-list instead of a receiver. The config check refuses a split whose
+factory isn't listed, one that the factory would refuse, and one set with
+a `partnerFeeBps` above 0 or a `receiver`
+([turn a split on](fees.md#turn-a-split-on)).
 
 ## `origins`
 

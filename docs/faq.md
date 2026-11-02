@@ -14,7 +14,9 @@ The server never gets a private key and can't sign for you
 ### What does a swap cost?
 
 The network's gas, SODAX's fee, which is included in the rate, and the
-operator's fee if the operator set one. ExClip's default is no fee. The
+operator's fee if the operator set one. With a fee split, that fee also
+pays a platform, and the review shows each share. ExClip's default is no
+fee. The
 review shows each cost before you confirm
 ([fees](fees.md#what-a-swap-costs)).
 
@@ -47,7 +49,8 @@ before you approve
 ### Why did the passkey wallet refuse my swap?
 
 It signs only a swap that matches what you asked for. It also refuses a fee
-to an address it doesn't list and, between two dollar stablecoins, a
+to an address it doesn't list, a split fee that isn't exactly the split's
+rates and, between two dollar stablecoins, a
 minimum below 97 % of what you pay. For other pairs, a minimum more than
 5 % under its own SODAX quote brings up a full-screen warning
 ([what happens when you sign](wallet.md#what-happens-when-you-sign)).
@@ -123,7 +126,9 @@ wallet's build. Redis or Postgres is then enough for storage
 Yes, up to 1 % of each swap. You set the fee in `exclip.config.ts`, add the
 receiver to `apps/wallet/fee-receivers.json` in a reviewed commit, and
 check what charging a fee means where you operate
-([turn a fee on](fees.md#turn-a-fee-on)).
+([turn a fee on](fees.md#turn-a-fee-on)). Or share one fee with a platform
+through a fee split: your rate, up to 1 %, on top of the platform's
+([a fee split](fees.md#a-fee-split)).
 
 ### Can I offer tokenised stocks?
 

@@ -86,6 +86,7 @@ What the app reads when it starts. It never carries a key.
   "sodaxConfigured": true,
   "partnerFeeBps": 0,
   "feeReceiver": null,
+  "feeSplit": null,
   "embeddedWallet": true,
   "walletOrigin": "https://wallet.example.org",
   "unbackedLimitUsd": 100,
@@ -98,13 +99,35 @@ What the app reads when it starts. It never carries a key.
 |---|---|
 | `tradingEnabled` | `features.trading`. When false, the app shows a "Trading is paused" banner; prices, charts and quotes stay live. |
 | `sodaxConfigured` | Whether the server has a SODAX key. It says so, and nothing more. |
-| `partnerFeeBps` | The fee the server pins, in basis points. `0` when no fee is set. |
-| `feeReceiver` | The fee's receiver, or `null`. |
+| `partnerFeeBps` | The plain fee the server pins, in basis points. `0` when no plain fee is set, as with a split. |
+| `feeReceiver` | The plain fee's receiver, or `null`. |
+| `feeSplit` | The [fee split](fee-split.md#the-server), or `null` when none is set. See below. |
 | `embeddedWallet` | `features.embeddedWallet`. |
 | `walletOrigin` | The wallet origin, or `null` when the wallet is off. The app only uses it as an on/off switch: the origin it trusts is fixed in its build. |
 | `unbackedLimitUsd` | `wallet.unbackedLimitUsd`. |
 | `stocksEnabled` | `stocks.enabled`, after `EXCLIP_DISABLE_STOCKS`. When false, the app names and offers no tokenised stock. |
 | `stocksTermsVersion` | `stocks.termsVersion`, the terms users confirm before trading stocks, or `null` while stocks are off. |
+
+With a split, `feeSplit` says who gets what. Each rate is per 100,000 of
+the amount sold. This example uses the local dry run's splitter:
+
+```json
+"feeSplit": {
+  "receiver": "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe",
+  "totalRate": 975,
+  "platform": { "name": "Platform", "rate": 875 },
+  "operator": { "name": "Acme Ltd", "rate": 100 },
+  "stockFee": null
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `receiver` | The operator's splitter, where the whole fee goes. |
+| `totalRate` | The two rates together. The fee is the amount sold × `totalRate` ÷ 100,000, rounded down. |
+| `platform` | The platform's name, from its factory's entry in the fee allow-list, and its rate. |
+| `operator` | `brand.operator`, or `brand.name` when that is empty, and the operator's rate. |
+| `stockFee` | The fee on a swap with a tokenised stock on either side, which never goes to the splitter: `{ "receiver", "bps" }`, the operator's own address and its rate in basis points, or `null` for none. |
 
 `Cache-Control: public, max-age=30`.
 
@@ -219,10 +242,7 @@ What the server does with each request, in order:
    "builds", and a quote with `includeTxData=true`, answer
    `403 TRADING_DISABLED`. Status, submit and cancel stay open, so an order
    that was already signed can always be followed or cancelled.
-5. **Body.** A `POST` body must be a JSON object (`400 BAD_BODY`). On the
-   routes marked "fee pinned", the server removes any `partnerFee` and
-   `hook` the browser sent, then adds the configured fee, if there is one.
-   See [fees](fees.md).
+5. **Body.** A `POST` body must be a JSON object (`400 BAD_BODY`).
 6. **Tokenised stocks.** On the routes marked "stock check", the server
    looks up both tokens in SODAX's token list, which it reads at most every
    5 minutes. When either is a token SODAX flags as a real-world asset
@@ -231,14 +251,26 @@ What the server does with each request, in order:
    reason ([tokenised stocks](#tokenised-stocks)). If the list can't be
    read, any request with a token in it is refused with
    `503 TOKEN_LIST_UNAVAILABLE` rather than let through.
-7. **Upstream.** The request goes to SODAX with a 15-second timeout. Up to
+7. **Fee.** On the routes marked "fee pinned", the server removes any
+   `partnerFee` and `hook` the browser sent, then adds its own fee, if
+   there is one ([fees](fees.md)):
+   - a plain fee, as configured, on every swap;
+   - a [fee split](fee-split.md#the-server)'s fee, as an amount to the
+     splitter: the amount sold, which is `amount` on the quote and
+     `inputAmount` on the other routes, × the total rate ÷ 100,000,
+     rounded down. Nothing is pinned when that is 0. A split's request
+     whose amount sold isn't a whole number written in digits is refused
+     with `400 BAD_AMOUNT`;
+   - with a split, on a swap with a tokenised stock on either side, the
+     operator's own fee, or none. Never the splitter.
+8. **Upstream.** The request goes to SODAX with a 15-second timeout. Up to
    four attempts in all, with backoff: a `429` and SODAX's "API key
    verification is temporarily unavailable" `503` are always retried; a
    `5xx`, a timeout or a network error only on routes that are safe to repeat
    (all the reads, the quote, the allowance check and the status lookup).
    Identical requests to a cached route that arrive together share one
    upstream call.
-8. **Answer.** SODAX's status and JSON body go back with the key removed
+9. **Answer.** SODAX's status and JSON body go back with the key removed
    wherever it appears. Cached routes carry `Cache-Control: public,
    max-age=30` and `X-Cache: hit` or `miss`; every other answer is
    `no-store`.
@@ -248,6 +280,7 @@ Errors the proxy adds:
 | Status | Code | When |
 |---|---|---|
 | 400 | `BAD_BODY` | A `POST` body that isn't a JSON object |
+| 400 | `BAD_AMOUNT` | With a fee split, a fee route's amount sold (`amount` on the quote, `inputAmount` otherwise) that isn't a whole number written in digits |
 | 403 | `TRADING_DISABLED` | Building a transaction while trading is off |
 | 404 | `NOT_ALLOWED` | A path or method not in the allow-list |
 | 429 | `SODAX_RATE_LIMITED` | SODAX kept answering 429 (`Retry-After: 5`) |

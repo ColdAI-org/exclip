@@ -111,6 +111,7 @@ fills allowed.
 | **Minimum received** | The least a solver may deliver. Below it, the swap doesn't happen |
 | **Deadline** | When an unfilled intent stops being valid |
 | **Partner fee** | An optional fee the operator takes from each swap, up to 1 %. It's zero unless the operator sets one ([fees](fees.md)) |
+| **Fee split** | One partner fee shared between a platform and the operator: the platform's rate plus the operator's, up to 1.875 % in all. A contract, the operator's splitter, receives it and pays each its share ([fee split](fee-split.md)) |
 | **Network fee** | The gas your wallet pays on the source network, in that network's own coin. It goes to the network, not to ExClip |
 | **Tokenised stocks** | Tokens meant to track the price of a company's shares, which SODAX lists as real-world assets. They're off unless the operator switches them on, and even then refused in some countries ([tokenised stocks](tokenised-stocks.md)) |
 | **Browser wallet** | A wallet you already use, such as an extension or Clip Wallet. ExClip connects nine families: EVM, Solana, Sui, Bitcoin, Stellar, NEAR, Injective, Stacks and ICON |
@@ -142,6 +143,7 @@ tokens in its own table, so its review can name exactly what you sign
   keys live.
 - [The passkey wallet](wallet.md): how it works in plain terms, and how to
   back it up.
-- [Fees](fees.md): how the partner fee works, and why it fails closed.
+- [Fees](fees.md): how the partner fee and the fee split work, and why
+  they fail closed.
 - [Security](security.md): the trust model, and the test behind each
   promise.

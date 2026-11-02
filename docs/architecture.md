@@ -147,8 +147,9 @@ Four tests named "SODAX key 1/4" to "SODAX key 4/4" in
 ([security](security.md#invariants-and-how-they-are-tested)).
 
 The same proxy is where the operator's settings are enforced. It pins the
-configured partner fee on every quote and intent and drops any fee the
-browser sends ([fees](fees.md)). It refuses tokenised stocks, unless the
+configured partner fee, or a [fee split](fee-split.md#the-server)'s amount
+for that swap, on every quote and intent, and drops any fee the browser
+sends ([fees](fees.md)). It refuses tokenised stocks, unless the
 operator has switched them on and the visitor passes the stock check
 ([tokenised stocks](tokenised-stocks.md#who-may-trade-them)). It refuses to
 build trades while trading is switched off. The cost of this design is that

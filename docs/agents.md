@@ -35,14 +35,22 @@ example "the app at https://swap.acme.example and the wallet at
 https://wallet.acme.example") and the links to your terms and privacy
 notice. Without them, the agent leaves those settings for you.
 
+To share one fee with a platform instead, through a
+[fee split](fee-split.md), ask for it and name the factory, for example
+"a 0.1% fee on top of the platform's, with the factory 0xFactoryAddress,
+paid to 0xYourOperatorAddress". The factory must already be listed in
+`apps/wallet/fee-receivers.json`, with values a reviewer read from the
+chain. The agent never writes that entry: if it's missing, the agent asks
+for it.
+
 ## What the agent changes
 
 | What | Where |
 |---|---|
 | Name, operator, colours, logo path and fee | `exclip.config.ts`, a copy of `exclip.config.example.ts`. Git ignores it |
 | Your logo | In `apps/web/public`, for example `apps/web/public/acme.svg` |
-| The fee receiver | Added to `apps/wallet/fee-receivers.json`, the passkey wallet's list of addresses a fee may go to |
-| The test that expects that list to be empty | `apps/wallet/test/build-config.test.ts`, changed to expect your receiver |
+| The fee receiver, or your split | Added to `apps/wallet/fee-receivers.json`, the passkey wallet's list of where a fee may go |
+| The test that expects that list to be empty | `apps/wallet/test/build-config.test.ts`, changed to expect your receiver or split |
 
 It changes no other code. It keeps the "Powered by ExClip" credit at the end
 of the footer: it is ExClip's attribution notice, and every copy shows it
@@ -99,13 +107,17 @@ The agent can't do these, or shouldn't:
    under `apps/web/public`. Anything else needs a reason.
 2. Run `git diff`. The address in `fee-receivers.json` must be yours,
    character for character, and the test must expect the same address in
-   lower case.
+   lower case. For a split, check the operator's address and rate under
+   `splits`, and that the agent didn't add or change a factory.
 3. Open `exclip.config.ts` yourself. Git ignores it, so `git diff` doesn't
    show it. Check:
    - `brand`: your name, operator and logo path, with no "ExClip" in them;
    - `fees.partnerFeeBps`: the fee in basis points, where `100` is 1 % and
      `10` is 0.1 %;
    - `fees.receiver`: your address again;
+   - or, for a split, `fees.split`: the factory, your address and your rate
+     per 100,000, where `100` is 0.1 %, with `partnerFeeBps` at `0` and
+     `receiver` at `null`;
    - `origins`: your domains, or the examples if you gave none;
    - `sodax.apiKey`: empty. The agent never handles your key.
 4. Look through the screenshots in `screenshots/`: your name, logo and
@@ -115,7 +127,9 @@ The agent can't do these, or shouldn't:
    bottom of the page names your operator, for example "Acme Swap is run by
    Acme Ltd.", and ends with "Powered by ExClip".
    `http://localhost:5173/api/exclip/config` shows your fee:
-   `"partnerFeeBps": 10` for 0.1 %, and your address as `feeReceiver`.
+   `"partnerFeeBps": 10` for 0.1 %, and your address as `feeReceiver`. A
+   split shows as `feeSplit`, with the splitter, each party's name and its
+   rate ([`GET /config`](api.md#get-config)).
 
 ## Check before you go live
 
@@ -128,8 +142,10 @@ these three yourself before real users arrive:
 - **The fee.** The receiver in `exclip.config.ts` and in
   `fee-receivers.json` is an address you control, and the rate is what you
   meant. Once the server runs, `/api/exclip/config` shows both
-  ([smoke checks](self-hosting.md#smoke-checks)). Make a first trade with a
-  small amount.
+  ([smoke checks](self-hosting.md#smoke-checks)). With a split, the
+  factory's entry in `fee-receivers.json` matches what the chain says
+  ([deploy to Sonic](../contracts/fee-split/README.md#deploy-to-sonic)).
+  Make a first trade with a small amount.
 - **The origins.** Each is an exact `https://` origin, the wallet on a host
   of its own, and each host sends its headers. The smoke checks compare
   them with what `pnpm --filter @exclip/config run headers` prints.

@@ -5,7 +5,7 @@ DEX. SODAX pays a partner fee on Sonic (chain id 146), as a plain balance of the
 `FeeSplitterFactory` creates one `FeeSplitter` per operator and operator rate, at an address known before it
 exists. That address is the receiver. Anyone can then pay each payee its share.
 
-[docs/fee-split.md](../../docs/fee-split.md) explains how SODAX pays a partner fee and how ExClip would use these
+[docs/fee-split.md](../../docs/fee-split.md) explains how SODAX pays a partner fee and how ExClip uses these
 contracts.
 
 **Not audited.** No outside party has reviewed these contracts. The tests and the static analysis below are the
@@ -257,7 +257,12 @@ viem 2.57.7's entry for Sonic lists the RPC endpoint `https://rpc.soniclabs.com`
    cast call <factory> "platform()(address)" --rpc-url sonic
    cast call <factory> "platformRate()(uint256)" --rpc-url sonic
    cast call <factory> "maxTotalRate()(uint256)" --rpc-url sonic
+   cast call <factory> "initCodeHash()(bytes32)" --rpc-url sonic
    ```
+7. For a copy of ExClip to use the factory, list it under `factories` in that copy's
+   `apps/wallet/fee-receivers.json`, with the four values from step 6 and the platform's name, in a reviewed commit
+   ([the fee allow-list](../../docs/fee-split.md#the-fee-allow-list)). The list refuses an `initCodeHash` that isn't
+   the one worked out from the factory's address. This repository lists no factory.
 
 ## Use a splitter
 

@@ -11,17 +11,21 @@ factory creates one splitter for each operator and rate, at an address
 known before the splitter exists. The contracts are in
 [`contracts/fee-split`](../contracts/fee-split/README.md).
 
-**Not audited.** No outside party has reviewed the contracts. Their tests
-and static analysis are the only checks so far.
+**Not audited.** No outside party has reviewed the contracts, or the code
+in ExClip that uses them. Their tests and static analysis are the only
+checks so far.
 
-**Not in use.** The contracts are not deployed, and nothing in the app, the
-server or the wallet uses them yet. The
-[integration design](#integration-design) says what would change.
+**Built, and off by default.** The config, the server, the app and the
+passkey wallet all handle a split
+([the split in ExClip](#the-split-in-exclip)). The repository's default
+charges no fee, and its fee allow-list lists no factory and no split. This
+repository deploys no contract.
 
 This page starts with how SODAX pays a partner fee, which decides how a
 split can work. Then it covers how the split works, an example, what the
-contracts guarantee, how a payee collects, deploying the factory, the
-integration design, and the decisions left to the owner.
+contracts guarantee, how a payee collects, deploying the factory, how
+ExClip uses the split, the owner's decisions, and the questions still
+open.
 
 ## How SODAX pays a partner fee
 
@@ -68,11 +72,12 @@ intent's `data` (`sdk:25251-25284`; the type numbers are at
 `sdk:25006-25012`). "The intents contract reads this on-chain and routes
 the fee to the partner address" (`sdk:25238`).
 
-ExClip uses the percentage form today. The config allows whole basis
-points from 0 to 100 (`packages/config/src/index.ts:148` and `:334`), and
-the server pins `{ address, percentage }` on every route that carries a fee
-(`packages/config/src/index.ts:422`,
-`apps/server/src/services/sodaxProxy.ts:99-103` and `:191`).
+ExClip uses both. A plain fee is a percentage: the config allows whole
+basis points from 0 to 100 (`packages/config/src/index.ts:192` and
+`:384`), and the server pins `{ address, percentage }` on every route that
+carries a fee (`packages/config/src/index.ts:512`,
+`apps/server/src/services/sodaxProxy.ts:114` and `:122-126`). A split is
+an amount, worked out for each swap ([the server](#the-server)).
 
 ### Where the fee goes, and in which token
 
@@ -84,10 +89,10 @@ the server pins `{ address, percentage }` on every route that carries a fee
   from another chain, that is the token's hub asset: the ERC-20 that stands
   for it on Sonic (`sdk:25197`). For a swap from Sonic, it is the Sonic
   token itself, and native S is `0x0000…0000` (`sdk:25658-25701`). ExClip's
-  wallet checks the same thing (`apps/wallet/src/sodax/policy.ts:252`).
+  wallet checks the same thing (`apps/wallet/src/sodax/policy.ts:283`).
   The amounts are in the same smallest units as the token sold: the wallet
   checks that the intent's amount plus the fee equals the amount the user
-  pays (`policy.ts:256`).
+  pays (`policy.ts:287`).
 - **As a plain balance.** The fee lands as an ordinary balance of the
   receiver's address. SODAX's fee tools read a partner's fees with ERC-20
   `balanceOf(partner)` over every hub asset (`sdk:43807-43843`), and tell a
@@ -100,7 +105,7 @@ the server pins `{ address, percentage }` on every route that carries a fee
 Native S needs care. For a swap that sells native S from Sonic, the SDK
 sends the whole amount, fee included, as the transaction's value
 (`sdk:25700`), and ExClip's wallet allows such swaps
-(`policy.ts:279` and `:298-300`). How the intents contract then passes the
+(`policy.ts:319` and `:338-340`). How the intents contract then passes the
 fee on in native S isn't visible here. The ABI in the SDK even lists
 `createIntent` as `nonpayable` (`sdk:12065-12148`). A receiver that may get
 native S should accept it however it is sent, including Solidity's
@@ -220,7 +225,7 @@ What they don't do:
 - **Check the fee.** A splitter shares whatever reaches it. It can't see
   what was sold, so it can't tell whether the fee was the right share of
   it. That check belongs to the server, the app and the wallet
-  ([integration design](#integration-design)).
+  ([the split in ExClip](#the-split-in-exclip)).
 - **Change a payee.** A payee that loses access to its address loses its
   share. Use an address you control for good, such as a multisig.
 - **Pay a payee that refuses native S.** That share stays in the splitter.
@@ -275,14 +280,16 @@ In short:
    name no address. It is a parameter, `PLATFORM_RECEIVER`.
 2. **Choose the rates**: the platform's, `PLATFORM_RATE` (875 by default),
    and the cap on the total, `MAX_TOTAL_RATE` (1,875, or 1.875 %, by
-   default), which leaves an operator up to 1 %. See the
-   [decisions](#decisions-for-the-owner) about the cap.
+   default), which leaves an operator up to 1 %. The owner
+   [decided](#the-owners-decisions) these values.
 3. **Simulate** with `forge script` without `--broadcast`, and check every
    value it returns.
 4. **Deploy**, signing with an encrypted keystore or a Ledger. The script
    reads no key.
 5. **Verify** the source on the explorer, and read the factory's
-   `platform`, `platformRate` and `maxTotalRate` back from the chain.
+   `platform`, `platformRate`, `maxTotalRate` and `initCodeHash` back from
+   the chain. A copy of ExClip lists those values under `factories` in its
+   fee allow-list ([the fee allow-list](#the-fee-allow-list)).
 
 The platform's address, its rate and the cap can't change. Changing any of
 them means a new factory, and a new splitter address for every operator.
@@ -291,56 +298,72 @@ An operator's splitter needs nothing deployed before its first fee: its
 address is the factory's `predict(operator, operatorRate)`. Anyone can
 create it later with `deploy(operator, operatorRate)`.
 
-## Integration design
+## The split in ExClip
 
-This is a design. Nothing in it is built yet. The parts it touches that
-decide where money goes, which are the config rules, the fee allow-list
-and the wallet's signing policy, get extra review
+A copy of ExClip charges a plain fee, a split, or no fee, which is the
+default. The code that decides where a fee goes, which is the config
+rules, the fee allow-list, the splitter's address and the wallet's signing
+policy, gets extra review
 ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)).
+[Fees](fees.md#a-fee-split) says how to turn a split on.
 
-| | Today | With the split |
+| | A plain fee | A split |
 |---|---|---|
-| The rate | The operator's, in whole basis points, 0 to 100 | The platform's 875 plus the operator's, per 100,000 |
+| Set by | `fees.partnerFeeBps` and `fees.receiver` | `fees.split`: a listed factory, the operator's address and its rate |
+| The rate | The operator's, in whole basis points, 0 to 100 | The platform's plus the operator's, per 100,000; the operator's 0 to 1,000 |
 | What SODAX is sent | `{ address, percentage }` | `{ address, amount }` |
 | The receiver | `fees.receiver`, typed in the config | The operator's splitter, worked out, never typed |
 | What the passkey wallet signs | A fee of at most 1 % to an address on its list | A fee of exactly the total rate, to a splitter it works out itself |
-| The wallet's review | "Acme Swap fee" and the amount | "9.75 USDC · 0.875 % to ColdAI · 0.1 % to Acme Swap" |
+| The wallet's review | `Acme Ltd fee 3 USDC` | `9.75 USDC · 0.875% to ColdAI · 0.1% to Acme Ltd` |
+| A swap with a tokenised stock | The same fee | The operator's own plain fee, or none |
+
+In the reviews above, "Acme Ltd" is the build's `brand.operator`, or
+`brand.name` when that is empty. "ColdAI" is the `platformName` of the
+factory's entry in the allow-list: no code names the platform.
 
 ### The config
 
-The repository's default stays at no fee: a default that charges one won't
-be accepted ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)).
-The split is set in the config of each DEX launched through ColdAI.
-
-The operator sets three values, for example under `fees.split`:
+A split is set under `fees.split`
+(`packages/config/src/index.ts:52-64`). The repository's default sets none.
 
 | Setting | Meaning |
 |---|---|
-| `factory` | The factory's address on Sonic |
+| `factory` | The factory's address on Sonic. The fee allow-list must list it ([below](#the-fee-allow-list)) |
 | `operator` | The operator's address on Sonic, where its share is paid |
-| `operatorRate` | The operator's rate per 100,000, a whole number: `100` is 0.1 %, and `0` charges only the platform's fee |
+| `operatorRate` | The operator's rate per 100,000 of the amount sold, a whole number from 0 to 1,000: `100` is 0.1 %, and `0` charges only the platform's fee |
+| `stockFeeBps` | The operator's own fee on a swap with a tokenised stock, in basis points from 0 to 100, paid to `operator`. Default `0` ([tokenised stocks](#tokenised-stocks)) |
 
 The platform's address, its rate and the cap are not settings. The factory
-fixes them, and they are recorded once, beside the factory's address, in
-the reviewed fee allow-list ([below](#the-fee-allow-list)). The config
-check, the server and the wallet build take them from there, so a config
+fixes them, and the allow-list records them beside the factory's address.
+The config check takes them from there (`index.ts:406-412`), so a config
 can't misstate them.
 
-The config check refuses a split that the factory would refuse
-(`contracts/fee-split/src/FeeSplitterFactory.sol:83-88`):
+The config check refuses (`index.ts:396-415`):
 
-- the operator is the zero address;
-- the operator is the platform;
-- the operator's rate is above the cap minus the platform's rate;
-- both rates are zero.
+- a factory that the allow-list doesn't list;
+- an `operatorRate` that isn't a whole number from 0 to 1,000
+  (`OPERATOR_RATE_MAX`, `packages/config/src/fee-rates.ts:11`);
+- a split in a config that also sets a plain fee: `fees.partnerFeeBps`
+  above 0, or a `fees.receiver`;
+- whatever the factory would refuse, checked in the factory's order
+  (`packages/config/src/fee-split.ts:76-82`, as
+  `contracts/fee-split/src/FeeSplitterFactory.sol:83-88`): the zero
+  address as the operator, the platform as the operator, an operator's
+  rate above the cap minus the platform's rate, and two rates of zero.
 
-It also refuses a factory that the allow-list doesn't name. These checks
-matter. The CREATE2 formula gives an address for any input, so without
-them a config could name an address where no splitter can ever be created,
-and a fee sent there would be stuck for good.
+These checks matter. The CREATE2 formula gives an address for any input,
+so without them a config could name an address where no splitter can ever
+be created, and a fee sent there would be stuck for good.
 
-`fees.partnerFeeBps` and `fees.receiver` stay, for a copy that charges a
-plain fee. A config sets one kind of fee or the other, never both.
+What passes is resolved once, with the splitter's address
+(`index.ts:417-427`). `PARTNER_FEE_MAX_BPS` (`index.ts:192`) still limits
+a plain fee and `stockFeeBps` to 1 %. A split's total may reach the listed
+cap.
+
+The config check reads the allow-list from the repository root whenever it
+reads the config (`packages/config/src/node.ts:52-60` and `:67`): when the
+server starts, and when either app builds. A broken allow-list stops all
+three.
 
 **The fee is sent as an amount.** The total rate is finer than a basis
 point: 0.975 % is 97.5 basis points, and the percentage form takes whole
@@ -351,201 +374,372 @@ the fee is worked out for each swap, and sent as `{ address, amount }`:
 fee = amount sold × (platform's rate + operator's rate) ÷ 100,000, rounded down
 ```
 
-### The receiver
+That is `splitFee` (`packages/config/src/fee-rates.ts:22-24`), the one
+copy of the arithmetic that the server, the app and the wallet use.
+
+### The splitter's address
 
 The receiver is the operator's splitter: the address that the factory's
-`predict(operator, operatorRate)` returns. It can be worked out without
-reading the chain
-([a splitter's address](../contracts/fee-split/README.md#the-proxy)). So
-the config check works it out, the server pins it, and the wallet works it
-out again for itself. Nobody types it.
+`predict(operator, operatorRate)` returns. ExClip works it out without
+reading the chain, in one module, `packages/config/src/fee-split.ts`. The
+config check, the server and the wallet window use it. The app takes the
+splitter from `/config` and bundles only `fee-rates.ts`, which has no
+hashing in it.
+
+`predictSplitter` (`fee-split.ts:136-144`) does what the factory does:
+
+1. It refuses a factory that can't exist, as the factory's constructor
+   would (`fee-split.ts:61-72`, as `FeeSplitterFactory.sol:37-39`), and
+   whatever `predict` would refuse (`fee-split.ts:76-82`).
+2. The implementation is the factory's first creation: its CREATE address
+   at nonce 1 (`fee-split.ts:104-107`).
+3. The creation code is the proxy's, with the implementation's address in
+   it (`fee-split.ts:17-23` and `:110-113`).
+4. The salt is `keccak256(abi.encode(operator, operatorRate))`
+   (`fee-split.ts:121-125`), and the address is the one CREATE2 gives the
+   factory (`fee-split.ts:128-131`).
+
+Two checks tie the module to the contracts:
+
+- **The vectors.** `contracts/fee-split/script/Vectors.s.sol` deploys real
+  factories on a fresh anvil, and records what they predict, deploy and
+  refuse in `contracts/fee-split/test/vectors/splitters.json`.
+  `packages/config/test/fee-split.test.ts` checks the module against every
+  vector. One is the local dry run's: the factory `0x5b73…0519`, the
+  operator `0x2222…2222` and the rate 100 give the splitter `0x92F0…57Fe`
+  ([the vectors](../contracts/fee-split/README.md#the-vectors-exclip-is-tested-against)).
+- **The splitter's code.** `pnpm run splitter-code` compares the module's
+  creation code with the compiled factory's.
+
+CI's `contracts: forge, slither` job runs both. It writes the vectors again
+and fails if they differ from the committed file, and it fails if the
+splitter's code has drifted ([development](development.md#scripts)).
 
 The splitter doesn't have to exist when the first fee arrives. It has to
 exist before the first release, and anyone can create it.
 
+### The fee allow-list
+
+`apps/wallet/fee-receivers.json` says where the passkey wallet lets a fee
+go. It has three lists, and the repository ships all three empty:
+
+- **`receivers`**: the addresses a plain fee may go to, as before.
+- **`factories`**: each factory's address, the platform's name, the
+  platform's address and rate, the cap, and what the factory's
+  `initCodeHash()` returns. A reviewer reads each value from the chain
+  once
+  ([deploy to Sonic](../contracts/fee-split/README.md#deploy-to-sonic)),
+  and checks the verified source. Reviews show `platformName`.
+- **`splits`**: each operator's split under a listed factory: the
+  factory, the operator's address and its rate.
+
+An example, with the local dry run's factory and placeholder addresses.
+None of it is a real deployment:
+
+```json
+{
+  "$comment": "…",
+  "receivers": [],
+  "factories": [
+    {
+      "address": "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519",
+      "platformName": "Platform",
+      "platform": "0x1111111111111111111111111111111111111111",
+      "platformRate": 875,
+      "maxTotalRate": 1875,
+      "initCodeHash": "0xd458769130779d2ca04e9b6d0ca72e6bd108ce48b867f5b7d759c75bff63beb6"
+    }
+  ],
+  "splits": [
+    {
+      "factory": "0x5b73C5498c1E3b4dbA84de0F1833c4a029d90519",
+      "operator": "0x2222222222222222222222222222222222222222",
+      "operatorRate": 100
+    }
+  ]
+}
+```
+
+The splitter isn't listed: whatever needs it works it out. This split's is
+`0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe`. `parseFeeAllowList`
+(`fee-split.ts:210-270`) checks the file, and refuses:
+
+- a factory whose values no `FeeSplitterFactory` can have, or whose
+  `initCodeHash` isn't the one worked out from its address
+  (`fee-split.ts:236-242`), so a mistyped factory can't be listed;
+- a platform name that isn't plain text of 1 to 40 characters;
+- a split under a factory the file doesn't list, with a rate outside 0 to
+  1,000, or that its factory would refuse;
+- a factory or a split listed twice;
+- a split whose splitter is also under `receivers`, where it could be
+  paid as a plain fee;
+- an unknown key, anywhere in the file.
+
+Three things read the file, all through that function: the wallet's build
+(`apps/wallet/vite.config.ts:79`), the config check (`node.ts:52-60`) and
+so the server, which runs the config check when it starts. Each stops on
+an error.
+
+**Why this file.** It was already the reviewed list of where a fee may go,
+and the wallet build already read it. Keeping the factories and splits
+there means that one file holds every address a fee may go to, and one
+reviewed commit changes it. A second file, in `packages/config`, would
+need the same review, and could drift from this one.
+
+A DEX launched through ColdAI's launch plugin gets the platform's factory
+and its own split from the plugin, in its own copy. This repository lists
+neither ([the owner's decisions](#the-owners-decisions)).
+
 ### The server
 
-- **It pins the amount.** On the five routes that carry a fee
-  (`apps/server/src/services/sodaxProxy.ts:36` and `:40-43`), it drops the
-  browser's fee as it does today (`:99-103`), and pins
-  `{ address: splitter, amount }`.
-  It works the amount out from the request: `inputAmount` on the intent
-  routes, `amount` on the quote (`types`
-  `backend/backendApiV2.d.ts:214-231` and `:254-270`). It sends no
-  percentage. When both forms are present, SODAX uses the amount (`:14`).
-- **It quotes from the same number.** Today the app asks for a quote on the
-  amount after the fee (`apps/web/src/components/TradeSheet.tsx:113-127`),
-  and the server pins the fee on that quote as well. If SODAX takes a
-  pinned fee off a quote's `amount`, as the SDK's own `getQuote` does
-  (`sdk:30627-30633`), the quote counts the fee twice and comes out a
-  little low. With the split, the app should quote the amount sold, so
-  that the quote, the fee and the intent all start from the same number.
-- **It publishes the split.** `/config` publishes `partnerFeeBps` and
-  `feeReceiver` today (`apps/server/src/services/config.ts:82-83`). With
-  the split, it publishes the receiver, each party's name and rate per
-  100,000, and the fee on stock swaps.
+On the five routes that carry a fee, which are the quote,
+`allowance/check`, `approve`, `intents` and `limit-orders`
+(`apps/server/src/services/sodaxProxy.ts:38` and `:42-45`), the server
+drops the browser's fee, as before (`:122-126`), and pins its own
+(`feeFor`, `:112-120`):
+
+- **A plain fee**: `{ address, percentage }`, as configured, on every
+  swap.
+- **A split**: `{ address: splitter, amount }`, with no percentage. The
+  amount is `splitFee` of the amount sold, which is `amount` on the quote
+  and `inputAmount` on the other four routes (`types`
+  `backend/backendApiV2.d.ts:214-231`, `:254-270` and `:431`). Nothing is pinned
+  when the fee rounds down to 0.
+- **A split, on a swap with a tokenised stock on either side**: the
+  operator's own plain fee, or none
+  ([tokenised stocks](#tokenised-stocks)).
+
+The fee is pinned after the stock check (`:215-239`), because a split's
+fee depends on whether either side is a stock. A split's request whose
+amount sold isn't a whole number written in digits is refused with 400
+`BAD_AMOUNT` (`:106`, `:117` and `:234-237`) before it reaches SODAX,
+rather than sent on without the fee.
+
+`/config` publishes the split as `feeSplit`
+(`apps/server/src/services/config.ts:118-126`): the receiver, which is the
+splitter, the total rate, the platform's and the operator's names and
+rates per 100,000, and the fee on stock swaps. `partnerFeeBps` and
+`feeReceiver` stay, as `0` and `null` with a split
+([`GET /config`](api.md#get-config)). The platform's name comes from the
+factory's entry in the allow-list. The operator's is `brand.operator`, or
+`brand.name` when that is empty, as in the wallet window (`config.ts:90`).
+
+The start-up log shows the split (`apps/server/src/index.ts:32-41`). With
+the example allow-list above and no fee on stock swaps:
+
+```text
+[exclip] trading on; fee split 0.975 % to splitter 0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe (Platform 0.875 %, operator 0.1 %); on stock swaps no fee
+```
+
+### The quote
+
+The quote starts from the amount sold, as the fee and the intent do. The
+app used to ask for a quote on the amount after the fee, while the server
+pinned the fee on that quote too. The evidence says that SODAX takes a
+pinned fee off a quote's `amount`, so the fee was counted twice, and the
+quote and the minimum received came out about one fee low:
+
+- The SDK's own `getQuote` takes the partner fee off the amount before it
+  asks for a quote, so that "the returned `quoted_amount` reflects the net
+  output the user actually receives", and expects the same fee as
+  `createIntent` (`sdk:30603-30634`, with `adjustAmountByFee` at
+  `sdk:6806`). Its `LeverageYieldService.getQuote` does the same
+  (`sdk:44838-44857`).
+- The backend's fee is the "wire mirror of the SDK `PartnerFee` union"
+  (`types` `backend/backendApiV2.d.ts:10-22`). A quote's `amount` is the
+  "input amount" (`:223-224`), and a quote with `includeTxData=true`
+  builds the intent from the same request, "using the quoted amount as
+  `minOutputAmount`" (`:232-236`). That only works if the quote takes the
+  fee off the amount the intent sells.
+- SODAX's swaps API says to send the same `partnerFee` on the quote and on
+  the intent (`swaps-api:105-116`). Its React kit keys its quote cache on
+  the fee, because "a partnerFee change alters the quote"
+  (`dist/index.mjs:1623-1626` in `@sodax/dapp-kit` 2.2.0).
+
+So the app quotes the amount sold, for a plain fee as for a split
+(`apps/web/src/components/TradeSheet.tsx:119-122`). SODAX's backend isn't
+public, so this is still a question for SODAX
+([decisions for the owner](#decisions-for-the-owner)).
 
 ### The app
 
-- **It passes the fee with each swap.** Today it gives the SDK one
-  percentage for every swap (`apps/web/src/lib/api.ts:122-126`). With the
-  split, it passes `{ address: splitter, amount }` to each `createIntent`.
-  The SDK takes a fee per call (`extras.partnerFee`, `sdk:31303-31305`),
-  and uses an amount as given (`sdk:25257-25258`).
-- **It shows the split.** Today the review has one fee row
-  (`TradeSheet.tsx:274-276`), and works the fee out in basis points
-  (`:113-115`). With the split, it works the fee out per 100,000, and shows
-  two rows, such as "ColdAI fee (0.875 %)" and "Acme Swap fee (0.1 %)",
-  each with its amount.
+- **It passes the fee with each swap.** The SDK gets no fee of its own
+  (`apps/web/src/lib/api.ts:140-142`). Each swap works its fee out with
+  `swapFee` (`apps/web/src/lib/fees.ts:36-50`) and passes it to
+  `createIntent` as `extras.partnerFee`
+  (`apps/web/src/lib/wallet-runtime.tsx:125`, `:197`, `:204` and `:230`),
+  which the SDK uses in place of its own (`sdk:31303-31305`). A split's
+  fee is `{ address: splitter, amount }`, which the SDK uses as given
+  (`sdk:25257-25258`). A plain fee is `{ address, percentage }`, as before.
+- **It shows the split.** The same `swapFee` gives the review's rows, so
+  the review shows the fee the intent carries. With a split, the review
+  has one row for each party with a rate above 0, each with its amount
+  (`apps/web/src/components/TradeSheet.tsx:280-282`), such as
+  "ColdAI fee (0.875%)" and "Acme Ltd fee (0.10%)". The names come from
+  `/config`. On a phone, a long row name wraps rather than being cut off
+  (`apps/web/src/styles/exclip.css:356`).
+- **A swap with a stock** shows only the operator's own fee, or "None"
+  (`fees.ts:40`).
 
 ### The wallet
 
 For passkey users, the wallet is where the split is checked. It trusts
 nothing the app sends:
 
-- **It works the splitter out itself**, from the reviewed allow-list: the
-  factory, the operator's address and the operator's rate. It applies the
-  factory's four checks, then computes the address as the factory does.
-  The implementation is the factory's first creation: its CREATE address
-  at nonce 1. The creation code is the proxy's, with the implementation's
-  address in it. The salt is `keccak256(abi.encode(operator, operatorRate))`.
-  The local dry run gives a test vector: the factory `0x5b73…0519`, the
-  operator `0x2222…2222` and the rate 100 give the splitter `0x92F0…57Fe`
-  ([try it locally](../contracts/fee-split/README.md#try-it-locally)).
-- **It checks the fee exactly.** A fee to a splitter must be the total rate
-  of the amount sold, rounded down: in the example above, exactly
-  9,750,000 units. Today's check is "at most 1 %"
-  (`apps/wallet/src/sodax/policy.ts:257`). An exact check means that the
-  rates on the review are the rates charged. The wallet's own cap
-  (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:87`) is 1 %
-  today. With the split it limits the operator's rate, while the total of
-  a split may reach the factory's cap, 1.875 %
-  ([the cap](#decisions-for-the-owner)).
-- **It shows who gets what.** Today the review names one fee, the
-  operator's, and shows the receiver's address (`policy.ts:337-338`). With
-  the split it says, for example,
-  "9.75 USDC · 0.875 % to ColdAI · 0.1 % to Acme Swap", and names the
-  receiver as the fee splitter. The platform's name comes from the
-  reviewed allow-list. The operator's comes from the build, as today
-  (`apps/wallet/src/config.ts:22`).
-- **It refuses a split on a stock swap**
+- **It works the splitter out itself.** Its build takes each listed
+  split's terms from the allow-list: the factory's values, the platform's
+  name, and the operator's address and rate
+  (`apps/wallet/build-guards.ts:24-31`, `apps/wallet/src/config.ts:12-20`).
+  Not the splitter's address: the wallet works that out with
+  `predictSplitter` (`apps/wallet/src/sodax/policy.ts:245-252`), and
+  matches the intent's receiver against it (`:263`). A splitter is looked
+  for before the plain receivers, so its fee is always held to the split's
+  rates.
+- **It checks the fee exactly.** A fee to a splitter must be the total
+  rate of the amount sold, rounded down (`policy.ts:294`): in the
+  [worked example](#a-worked-example), exactly 9,750,000 units. One unit
+  more or less is refused. So the rates on the review are the rates
+  charged. A plain fee is still "at most 1 %" (`policy.ts:296`).
+- **It holds the operator to 1 %.** The wallet's cap
+  (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:89`) limits the
+  operator's rate in a split (`policy.ts:293`), while the split's total
+  may reach its factory's listed cap
+  ([the owner's decisions](#the-owners-decisions)).
+- **It shows who gets what.** The review's Fees line says, for example,
+  `9.75 USDC · 0.875% to ColdAI · 0.1% to Acme Ltd · network …`, and the
+  receiver line names the address as the fee splitter
+  (`policy.ts:268-274` and `:377-378`). The platform's name comes from the
+  allow-list. The operator's is the build's, as for a plain fee
+  (`apps/wallet/src/config.ts:31`). A party whose rate is 0 is left out.
+- **It refuses a split on a stock swap**, telling stocks from its own
+  table, never from the request (`policy.ts:143` and `:292`)
   ([tokenised stocks](#tokenised-stocks)).
 
-Browser wallets check none of this. For them, as today, the server's
-pinning is the control ([why it fails closed](fees.md#why-it-fails-closed)).
+The build stops on an allow-list that `parseFeeAllowList` refuses
+(`apps/wallet/vite.config.ts:79`). It warns when the config's split isn't
+listed under `splits`, or when the operator's fee on stock swaps goes to an
+address `receivers` doesn't list (`build-guards.ts:67-80`). The wallet then
+refuses every swap that carries that fee.
 
-### The fee allow-list
-
-Today `apps/wallet/fee-receivers.json` lists addresses, and only the
-wallet build reads it (`apps/wallet/build-guards.ts:7-18`). With the split,
-it holds two more kinds of entry:
-
-- **Factories**: each factory's address, with the platform's name, address
-  and rate, and the cap. None of these can change, so a reviewer reads them
-  from the chain once, with the commands in
-  [`contracts/fee-split/README.md`](../contracts/fee-split/README.md#deploy-to-sonic),
-  and checks the verified source.
-- **Splits**: for each operator, the factory, the operator's address and
-  its rate. The wallet build works out each splitter's address, and stops
-  if the factory would refuse the split. It warns when the config's split
-  isn't listed, as it warns about a receiver today
-  (`build-guards.ts:41-52`).
-
-The config check and the server need the factory entries too. They can
-read the same file, or the factory entries can move to a reviewed file in
-`packages/config`, under the same rules.
-
-Plain receivers stay: for a copy with a plain fee, and for an operator's
-own fee on stock swaps.
+Browser wallets check none of this. For them, the server's pinning is the
+control ([why it fails closed](fees.md#why-it-fails-closed)).
 
 ### Tokenised stocks
 
 Swaps of tokenised stocks, the tokens SODAX flags `isRwa`, carry no
-platform fee. This design counts a swap as one when either side is a stock
-([decisions](#decisions-for-the-owner)).
+platform fee. A swap counts as one when either side is a stock. On those
+swaps the operator may still charge its own plain fee, `stockFeeBps`, paid
+straight to its own address, or none. Both are the owner's choice of
+2 November 2026 ([the owner's decisions](#the-owners-decisions)).
 
 Stocks are an operator opt-in that ships off
 ([tokenised stocks](tokenised-stocks.md)). The server sends a request with
 a stock on either side to SODAX only when its stock check passes it, and
-refuses it with a 451 otherwise (`sodaxProxy.ts:194-204`). The app lists
-stocks only when the server offers them (`TradeSheet.tsx:59-62`), and the
+refuses it with a 451 otherwise (`sodaxProxy.ts:215-228`). The app lists
+stocks only when the server offers them (`TradeSheet.tsx:60-62`), and the
 wallet signs them only in a build with stocks on, from its own table
-(`apps/wallet/src/sodax/stock-tokens.ts`, `apps/wallet/src/config.ts:30-31`).
+(`apps/wallet/src/sodax/stock-tokens.ts`, `apps/wallet/src/config.ts:41`).
 When a DEX offers stocks and also uses the split:
 
-- **The server** already tells which requests have a stock leg, from
-  SODAX's token list (`sodaxProxy.ts:62-70` and `:155-170`). For those it
-  pins the operator's own fee, paid straight to the operator's address, or
-  no fee at all. Never the splitter: a splitter gives the platform its
-  share of whatever reaches it.
+- **The server** tells which requests have a stock leg from SODAX's token
+  list (`sodaxProxy.ts:64-72` and `:178-193`). For those it pins the
+  operator's own fee, or none (`:115`). Never the splitter: a splitter
+  gives the platform its share of whatever reaches it.
 - **The wallet** tells stocks from its own reviewed table, never from the
-  request: `stock-tokens.ts` already marks them. It refuses a split on a
-  swap with a stock on either side.
-- **The app** shows only the operator's fee on those swaps, or "None".
+  request, and refuses a split on a swap with a stock on either side
+  (`policy.ts:292`). It signs the operator's own fee there only if the
+  address is listed under `receivers`, by the plain fee's rules.
+- **The app** shows only the operator's own fee on those swaps, or "None"
+  (`fees.ts:40`).
 
-### Documents to change
+### Where each rule is enforced
 
-When the split is built, these change with it:
+| Rule | Where |
+|---|---|
+| The platform's address and rate, and the cap, never change | `contracts/fee-split/src/FeeSplitterFactory.sol`: set once by its constructor (`:37-39` checks them) |
+| A splitter exists only for an operator and rate the factory accepts | `FeeSplitterFactory.sol:83-88`; ExClip checks the same in `packages/config/src/fee-split.ts:76-82` |
+| A factory is listed only with the values a factory there has | `parseFeeAllowList`, `fee-split.ts:226-251`, with the `initCodeHash` check at `:236-242` |
+| A split is listed only if its factory is, and would accept it | `fee-split.ts:253-268` |
+| A config's split uses a listed factory, and never comes with a plain fee | `packages/config/src/index.ts:396-415` |
+| The operator's rate is at most 1 % | `fee-split.ts:174-175` (config and allow-list), `apps/wallet/src/sodax/policy.ts:293` (wallet) |
+| The fee is the total rate of the amount sold, rounded down | `splitFee`, `packages/config/src/fee-rates.ts:22-24`, used by the server, the app and the wallet |
+| The server pins the split's amount to the splitter, whatever the browser sent | `apps/server/src/services/sodaxProxy.ts:112-126` and `:230-239` |
+| A swap with a stock on either side never pays the splitter | Server `sodaxProxy.ts:115`, app `apps/web/src/lib/fees.ts:40`, wallet `policy.ts:292` |
+| The passkey wallet works the splitter out itself | `policy.ts:245-252` and `:263` |
+| The passkey wallet signs exactly the split's rates | `policy.ts:294` |
+| The platform's name comes from the allow-list | `fee-split.ts:234`, then `apps/server/src/services/config.ts:88` and `policy.ts:272` |
+| The address maths matches the contracts | `packages/config/test/fee-split.test.ts` against the vectors, and `pnpm run splitter-code`, both in CI |
 
-- **`docs/fees.md`**: the table of costs, "How a fee works", "Why it fails
-  closed", "Turn a fee on", "Turn a fee off" and the table of tests. Each
-  needs the rates per 100,000, the amount form, the splitter as receiver,
-  the two parties on the review, and stock swaps.
-- **`README.md`**: the `fees` rows of the settings table, and the fees
-  section, which says "up to 1 %", whole basis points and a plain receiver.
-- **`AGENTS.md`**: step 6, "Set the fee", which turns a percentage into
-  basis points and adds a plain receiver to the allow-list. And the fee's
-  other mentions: the repository map, the recipe's opening, and steps 8
-  and 9.
-- **`CONTRIBUTING.md`**, "Changes that get extra review": the allow-list's
-  new entries, and what a reviewer checks for each. For a factory, its
-  values on the chain and its verified source. For a split, who controls
-  the operator's address, confirmed through a channel other than the pull
-  request, as today.
-- **The other pages that describe the fee**: `docs/configuration.md` (the
-  `fees` settings), `docs/api.md` (`GET /config`),
-  `docs/embedded-wallet.md` (the signing policy), `docs/security.md`,
-  `docs/wallet.md`, `docs/agents.md`, `docs/troubleshooting.md` (the
-  build's fee warning), `docs/self-hosting.md`, and the shorter mentions in
-  `docs/concepts.md`, `docs/architecture.md`, `docs/faq.md` and
-  `docs/development.md`.
+## The owner's decisions
+
+The owner decided these, and the code follows them:
+
+1. **The rates.** A DEX launched through ColdAI pays a platform fee of
+   0.875 % of the amount sold (875 per 100,000), through the split. Its
+   operator may take up to 1 % of its own (1,000) on the same swap. The
+   total is at most 1.875 % (1,875), the factory's cap and the deploy
+   script's default. Decided on 2 November 2026. A factory's cap can't
+   change, which is why it had to be settled before the factory is
+   deployed.
+2. **Live once built, not audited.** The split may be used as soon as it
+   is built. These pages and the contracts' README say that it is not
+   audited.
+3. **A neutral repository.** The default config charges no fee. The
+   allow-list's `factories` and `splits` ship empty, and no file here names
+   the platform's receiving address, its factory or a split of it. ColdAI's
+   launch plugin adds those entries in its own repository. The platform's
+   name on a review comes from the allow-list entry, never from code. Tests
+   and examples use the local dry run's factory and placeholder addresses
+   such as `0x1111…1111` and `0x2222…2222`.
+4. **Tokenised stocks.** A swap with a stock on either side carries no
+   platform fee and never goes to a splitter. On those swaps the operator
+   may still charge its own plain fee, paid straight to its own listed
+   address, or none ([tokenised stocks](#tokenised-stocks)). Decided on
+   2 November 2026.
+5. **The wallet's limit.** The wallet's `MAX_PARTNER_FEE_BPS`
+   (`apps/wallet/src/sodax/chains.ts:89`) and the config's
+   `PARTNER_FEE_MAX_BPS` (`packages/config/src/index.ts:192`) stay at 1 %.
+   They still limit a plain fee. In a split they limit the operator's rate,
+   and the split's total may reach its factory's listed cap. A change to
+   the wallet's fee limit normally needs an issue and agreement first
+   ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)). This
+   one was decided by the owner on 2 November 2026 instead.
 
 ## Decisions for the owner
 
-The first is decided. The rest are open, and this page lists them without
-deciding them.
+These are open. This page lists them without deciding them.
 
-1. **The cap: decided.** On 2 November 2026 the owner decided that an
-   operator may take up to 1 % of its own, on top of the platform's
-   0.875 %. The total is at most 1.875 %, so the deploy script's default
-   cap is 1,875 per 100,000. A factory's cap can't change, which is why it
-   had to be settled before the factory is deployed. Two limits are still
-   1 % on the whole fee: the config's (`PARTNER_FEE_MAX_BPS`,
-   `packages/config/src/index.ts:148`) and the wallet's
-   (`MAX_PARTNER_FEE_BPS`, `apps/wallet/src/sodax/chains.ts:87`). When the
-   split is built, each limits the operator's rate instead, and a split's
-   total may reach 1.875 %. Changing the wallet's limit needs an issue and
-   agreement first
-   ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)).
-2. **What SODAX allows.** The repository can't answer these. SODAX can:
+1. **What SODAX allows.** The repository can't answer these. SODAX can:
    - whether its backend caps a partner fee, and where. The type's comment
      says 100 basis points at most, while the SDK accepts up to 10,000
-     ([the two forms](#the-two-forms-of-a-partner-fee));
+     ([the two forms](#the-two-forms-of-a-partner-fee)). A split's total
+     may be up to 187.5 basis points;
    - whether every route ExClip uses takes the amount form, and whether a
-     quote takes a pinned fee off its `amount`;
+     quote takes a pinned fee off its `amount`, as ExClip now assumes
+     ([the quote](#the-quote));
    - how the intents contract pays a fee in native S
      ([where the fee goes](#where-the-fee-goes-and-in-which-token));
    - whether its terms let a partner share its fee with another party.
-3. **The platform's address.** It is chosen outside this repository:
+2. **The platform's address.** It is chosen outside this repository:
    every script and this page take it as a parameter, and no file here
    names it. It has to be an address ColdAI controls for good, that
    accepts native S on Sonic. Who deploys the factory is open too.
-4. **Stock swaps.** Whether "no platform fee" covers a swap with a stock on
-   either side, as this design assumes. And whether an operator may still
-   charge its own fee on those swaps.
-5. **How the platform fee holds.** Only the passkey wallet checks where a
+3. **How the platform fee holds.** Only the passkey wallet checks where a
    fee goes. On a DEX whose server someone else runs, browser-wallet swaps
    carry whatever fee that server pins
-   ([why it fails closed](fees.md#why-it-fails-closed)). Whether the
-   platform fee rests on who builds and runs each DEX, on an agreement, or
-   on something else, is open.
+   ([why it fails closed](fees.md#why-it-fails-closed)). The passkey wallet
+   also signs an intent that carries no fee at all, so a copy whose server
+   pins none pays nobody. Whether the platform fee rests on who builds and
+   runs each DEX, on an agreement, or on something else, is open.
+4. **The wallet's stablecoin floor.** The passkey wallet refuses a swap
+   between USD stablecoins whose minimum is below 97 % of the amount sold
+   (`STABLE_FLOOR_BPS`, `apps/wallet/src/sodax/price.ts:17`). The floor
+   was set for a fee of at most 1 % and slippage of at most 1 %. With a
+   split at its cap, 1.875 %, and the app's 1 % slippage setting, even a
+   swap at par comes within a fraction of a percent of the floor, so a
+   pair quoted a little below par is refused. That fails closed: the user
+   can pick a lower slippage. Lowering the floor would loosen a wallet
+   limit, which needs an issue and agreement first
+   ([CONTRIBUTING](../CONTRIBUTING.md#changes-that-get-extra-review)), and
+   the decision of 2 November 2026 covered the fee limits only. This
+   change leaves the floor as it was.

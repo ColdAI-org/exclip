@@ -16,7 +16,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <a href="https://github.com/ColdAI-org/exclip/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ColdAI-org/exclip/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <img alt="Tests: 265 passing" src="https://img.shields.io/badge/tests-265%20passing-2ea043">
+  <img alt="Tests: 309 passing" src="https://img.shields.io/badge/tests-309%20passing-2ea043">
   <a href="#fees"><img alt="Fee: zero by default" src="https://img.shields.io/badge/fee-zero%20by%20default-00B4F0"></a>
   <img alt="Status: preview, not audited" src="https://img.shields.io/badge/status-preview%20%C2%B7%20not%20audited-orange">
 </p>
@@ -192,6 +192,7 @@ value stops the server and the build, with a list of every problem.
 | `sodax.apiKey` | none | Your SODAX API key. Only the server reads it |
 | `fees.partnerFeeBps` | `0` | Partner fee in basis points, a whole number from 0 to 100 (1 %) |
 | `fees.receiver` | `null` | The EVM address that receives the fee. Required when the fee is above 0, and it must be in `apps/wallet/fee-receivers.json` too |
+| `fees.split` | `null` | A [fee split](docs/fee-split.md) instead of a plain fee: a factory listed in `apps/wallet/fee-receivers.json`, the operator's address, its rate per 100,000 (at most 1,000), and its own fee on stock swaps, `stockFeeBps` |
 | `origins.app` | `https://exclip.example.com` | Where the app is served |
 | `origins.wallet` | `https://wallet.example.com` | Where the passkey wallet is served, on a host of its own |
 | `brand.name` | `"ExClip"` | Your product's name, at most 40 characters |
@@ -394,27 +395,34 @@ ExClip charges no fee unless the operator sets one. A swap then costs the
 source network's gas, and SODAX's fee, which is included in the rate. The
 review says both.
 
-An operator can add a partner fee of up to 1 %. It fails closed at every
-step, so a mistake means no fee rather than a wrong one:
+An operator can add a partner fee of up to 1 %. Or it can use a
+[fee split](docs/fee-split.md): one fee, paid to a contract on Sonic that
+shares it between a platform and the operator. The split's contracts, and
+the code that uses them, are not audited. Either way, the fee fails closed
+at every step, so a mistake means no fee rather than a wrong one:
 
 - **The config** refuses a fee without a receiver, a fractional rate, or
-  more than 100 basis points, and the server won't start with one.
+  more than 100 basis points, and a split whose factory isn't listed or
+  that the factory would refuse. The server won't start with either.
 - **The server** pins the configured fee on every quote and intent, and
   drops any fee the browser sends. A browser can't add, raise, lower or
   redirect it.
-- **The passkey wallet** signs a fee only to an address in
-  `apps/wallet/fee-receivers.json`. That file ships empty and changes only
-  through a reviewed commit, so until someone adds a receiver, the wallet
+- **The passkey wallet** signs a fee only to a receiver in
+  `apps/wallet/fee-receivers.json`, or to the splitter of a split listed
+  there, which it works out itself. It signs a split's fee only at exactly
+  the split's rates. That file ships empty and changes only through a
+  reviewed commit, so until someone adds a receiver or a split, the wallet
   refuses every swap that carries a fee.
 
 [Fees](docs/fees.md) shows what the review displays, and how to turn a fee
-on and off.
+or a split on and off.
 
 ## Security
 
 - **The SODAX key stays on the server.** No build can carry a secret, and
   the proxy cuts the key out of every answer and log line.
-- **No fee by default, and fee receivers fail closed,** as above.
+- **No fee by default, and fee receivers and splits fail closed,** as
+  above.
 - **The passkey wallet is isolated.** It has its own origin and its own
   passkeys. Its CSP runs only its own code, enforces Trusted Types and
   forbids framing, and it may call exactly two outside URLs: SODAX's quote
@@ -498,7 +506,7 @@ This repository is ExClip's first version: swaps only. It doesn't include:
 | App | Market swaps, limit orders, asset and pair pages, the portfolio, and tokenised stocks when the operator switches them on. Live networks only: there is no test-network mode |
 | Passkey wallet | Market swaps, sends and receives on 14 EVM networks. No limit orders yet |
 | Server | One Node 24 process, on Postgres and optionally Redis. Serves both builds, or sits behind your own web server or CDN |
-| Tests | 265 passing: 102 in the wallet, 100 in the server, 42 in the app and 21 in the config package. CI runs them on every push to `main` and every pull request |
+| Tests | 309 passing: 114 in the wallet, 105 in the server, 50 in the app and 40 in the config package. CI runs them on every push to `main` and every pull request. A second job runs the fee-split contracts' 57 Foundry tests and Slither, on every push to `main` and on pull requests that change the contracts, the splitter code or the workflow |
 | Security | No independent audit yet |
 | Releases | No tagged release yet. `main` is version 0.1.0 |
 
@@ -520,10 +528,10 @@ Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 - Every commit needs a [DCO](https://developercertificate.org/) sign-off
   (`git commit -s`), and commit messages follow `type(scope): summary`.
 - `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm build` must pass.
-- A change to the fee allow-list, the wallet window, the message protocol,
-  the security headers or the config rules gets a line-by-line review. A
-  tighter limit needs no discussion; a looser one needs an issue and
-  agreement first.
+- A change to the fee allow-list, the fee split's code, the wallet window,
+  the message protocol, the security headers or the config rules gets a
+  line-by-line review. A tighter limit needs no discussion; a looser one
+  needs an issue and agreement first.
 - The vendored Clip Wallet packages are fixed upstream, not here.
 
 Please follow the [code of conduct](CODE_OF_CONDUCT.md). Changes are listed

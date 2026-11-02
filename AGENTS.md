@@ -16,9 +16,10 @@ Operators run it under their own name, logo, colours and fee, set in one file, `
 |---|---|
 | `exclip.config.example.ts` | The template for `exclip.config.ts`, the only config file. The copy is git-ignored |
 | `apps/web` | The app: React and Vite, dev port 5173. `public/` holds the logo |
-| `apps/wallet` | The passkey wallet popup: plain TypeScript and Vite, dev port 5311. `fee-receivers.json` is its fee allow-list |
+| `apps/wallet` | The passkey wallet popup: plain TypeScript and Vite, dev port 5311. `fee-receivers.json` is its fee allow-list: plain receivers, fee-split factories and splits |
 | `apps/server` | Express 5 on Node 24, port 8080: `/api/exclip/*`, the SODAX proxy, wallet backups. `migrations/` for Postgres |
-| `packages/config` | The config's types, defaults and checks, what each build may see, both origins' security headers, the contrast check |
+| `packages/config` | The config's types, defaults and checks, what each build may see, both origins' security headers, the contrast check, and the fee split's splitter address and rates (`src/fee-split.ts`, `src/fee-rates.ts`) |
+| `contracts/fee-split` | The fee-split contracts, built and tested with Foundry. Not part of the pnpm workspace, and not deployed by this repository |
 | `packages/clip-wallet-core`, `packages/clip-wallet-vault` | Vendored from Clip Wallet. Never edit them here |
 | `brand/` | ExClip's own brand kit. Not for rebrands |
 | `tools/` | The scripts behind `brand`, `screenshots` and `docs:links` |
@@ -86,8 +87,8 @@ the repository root.
   of the wallet window. It is ExClip's attribution notice
   ([NOTICE](NOTICE)), and no setting removes it.
 - **Files that get extra review:** `apps/wallet/fee-receivers.json`,
-  `apps/wallet/src/`, the message protocol, the security headers and the
-  config rules
+  `apps/wallet/src/`, the message protocol, the security headers, the
+  config rules and the fee split's code
   ([CONTRIBUTING](CONTRIBUTING.md#changes-that-get-extra-review)). Change
   them only when the task needs it, and say so.
 - **Documentation:** plain Markdown and short sentences. Check every claim
@@ -195,24 +196,56 @@ Every response from each host must carry that origin's security headers
 
 ### 6. Set the fee, if one was asked for
 
-Turn the percentage into basis points: 1 % is `100`, the most allowed, so
-0.1 % is `10`. Only whole numbers work; if the rate isn't a whole number of
-basis points, or is above 1 %, ask. Then follow
+A fee is a plain fee, paid to one address, or a fee split, which shares one
+fee between a platform and the operator ([fee split](docs/fee-split.md)).
+Set a split only when the request asks for one and names its factory, for
+example *a 0.1 % fee on top of the platform's, with the factory 0x…*.
+Otherwise set a plain fee. Never set both: the config check refuses that.
+
+**A plain fee.** Turn the percentage into basis points: 1 % is `100`, the
+most allowed, so 0.1 % is `10`. Only whole numbers work; if the rate isn't
+a whole number of basis points, or is above 1 %, ask. Then follow
 [turn a fee on](docs/fees.md#turn-a-fee-on):
 
 1. In `exclip.config.ts`, set `fees.partnerFeeBps` (`10`) and
    `fees.receiver` to the address exactly as given: `0x` and 40 hex digits.
 2. Add the same address to `receivers` in `apps/wallet/fee-receivers.json`.
-   Keep the `$comment`. Without this the wallet refuses every swap that
-   carries a fee ([why it fails closed](docs/fees.md#why-it-fails-closed)).
+   Keep the `$comment` and the other two lists. Without this the wallet
+   refuses every swap that carries a fee
+   ([why it fails closed](docs/fees.md#why-it-fails-closed)).
 3. In the same change, update the test that pins that list: in
    `apps/wallet/test/build-config.test.ts`, "the repository ships an empty
-   fee allowlist, …" expects `[]`. Make it expect the receiver in lower
-   case, which is how `parseFeeReceivers` returns it, and rename it to say
-   what it now checks.
+   fee allowlist, …" expects `{ receivers: [], factories: [], splits: [] }`.
+   Make it expect the receiver under `receivers` in lower case, which is
+   how `parseFeeAllowList` returns it, and rename it to say what it now
+   checks.
 4. Tell the person that the allow-list decides where the wallet lets fees
    go: it changes only in a reviewed commit, and someone must confirm who
    controls the address through a channel other than the pull request
+   ([CONTRIBUTING](CONTRIBUTING.md#changes-that-get-extra-review)).
+
+**A fee split.** The operator's rate is per 100,000 of the amount sold:
+0.1 % is `100`, and 1 % (`1000`) is the most allowed. If the rate isn't a
+whole number per 100,000, or is above 1 %, ask. Then follow
+[turn a split on](docs/fees.md#turn-a-split-on):
+
+1. The factory must be under `factories` in
+   `apps/wallet/fee-receivers.json`. Its entry holds values a reviewer read
+   from the chain, so never write one yourself: if it isn't there, ask for
+   the entry.
+2. Add the split under `splits`: the factory, the operator's address
+   exactly as given, and `operatorRate`.
+3. In `exclip.config.ts`, set `fees.split` to the same `factory`,
+   `operator` and `operatorRate`, and keep `partnerFeeBps` at `0` and
+   `receiver` at `null`. Set `stockFeeBps` only if a fee on swaps with
+   tokenised stocks was asked for, and if so, add the operator's address
+   under `receivers` too.
+4. Update the same test so that it expects what `parseFeeAllowList` returns
+   for the file, and rename it. The test's failure message shows what it
+   got.
+5. Tell the person what you'd tell them for a plain fee, about the
+   operator's address. The factory's entry needs the same review: its
+   values checked against the chain
    ([CONTRIBUTING](CONTRIBUTING.md#changes-that-get-extra-review)).
 
 ### 7. Keep the credit
@@ -237,8 +270,9 @@ Run each of these, and fix what fails:
    that start `exclip.config.ts:`
    ([what they mean](docs/troubleshooting.md#the-build-fails-or-warns)):
    one about example origins is expected while there are no domains; one
-   about the fee receiver means step 6 isn't done. The dependency notices
-   around them are expected too.
+   about the fee receiver, or about a fee split the wallet doesn't list,
+   means step 6 isn't done. The dependency notices around them are
+   expected too.
 4. In the build, `apps/web/dist/manifest.webmanifest` has the new name and
    logo.
 5. `pnpm run screenshots --brand`, then look at the PNGs in `screenshots/`:
@@ -259,8 +293,9 @@ End with a short summary: what you changed, including `exclip.config.ts`
 each check. Say where to see what the screenshots leave out: with
 `pnpm dev` running, the footer at the bottom of `http://localhost:5173`
 names the operator, and `http://localhost:5173/api/exclip/config` shows the
-fee as `partnerFeeBps` and `feeReceiver`. Then list what the person still
-has to do. You can't, or shouldn't, do these yourself:
+fee as `partnerFeeBps` and `feeReceiver`, or a split as `feeSplit`. Then
+list what the person still has to do. You can't, or shouldn't, do these
+yourself:
 
 - **The SODAX API key.** They set it as `SODAX_API_KEY` in the server's
   environment, which the docs prefer to `sodax.apiKey` in production
@@ -280,7 +315,8 @@ has to do. You can't, or shouldn't, do these yourself:
   swaps and charging a fee mean where they operate
   ([operator responsibility](README.md#operator-responsibility)).
 - **The fee receiver.** Confirming who controls the address, and reviewing
-  the allow-list commit.
+  the allow-list commit. For a split, the same for the operator's address,
+  and checking the factory's entry against the chain.
 - **The release.** Building the wallet in CI from a reviewed commit and
   deploying exactly that build
   ([release controls](docs/embedded-wallet.md#release-controls)).

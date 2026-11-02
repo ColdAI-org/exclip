@@ -161,10 +161,18 @@ The intent must match the plan in every field:
 
 Further rules:
 
-- **Fees.** A partner fee is at most 1 %, and it may go only to an address in
-  `apps/wallet/fee-receivers.json`. That file is committed and reviewed. It is
-  empty by default, which means the popup refuses every swap that carries a
-  fee.
+- **Fees.** A partner fee goes only where `apps/wallet/fee-receivers.json`
+  lets it. That file is committed and reviewed. Its lists are empty by
+  default, which means the popup refuses every swap that carries a fee.
+  - A plain fee is at most 1 %, to an address under `receivers`.
+  - A [fee split](fee-split.md#the-wallet)'s fee goes to the splitter that
+    the popup works out itself, from a split under `splits` and its
+    factory's entry, never from the request. It must be exactly the split's
+    total rate of the amount sold, rounded down: one unit more or less is
+    refused. The operator's rate is at most 1 %, and the total may reach
+    the factory's listed cap.
+  - A split's fee on a swap with a tokenised stock on either side is
+    refused. The popup tells stocks from its own table.
 - **Gas.** Nonces must be consecutive, and gas is at most 5 million per
   transaction. The fee per gas is capped per network: 500 gwei on Ethereum,
   10 gwei on the Ethereum rollups and BNB Chain, and never above 10,000 gwei.
@@ -188,7 +196,8 @@ Further rules:
   - the network;
   - you pay, and you receive (at least);
   - the receiving address and the hub account;
-  - the spender, the fees and the fee receiver;
+  - the spender, the fees and the fee receiver. For a split, the fees name
+    each party and its rate, and the receiver is named as the fee splitter;
   - the nonce;
   - the wallet host the user is signing from.
 
@@ -214,8 +223,12 @@ therefore checks it against references of its own
 (`apps/wallet/src/sodax/price.ts`):
 
 - **USD stablecoin to USD stablecoin:** refused when the minimum is below 97 %
-  of the input. ExClip's largest fee (1 %) plus its largest slippage setting
-  stays above that line.
+  of the input, fee included. A plain fee (at most 1 %) plus the largest
+  slippage setting (1 %) stays above that line. A split's fee may reach its
+  factory's cap, 1.875 %. With that fee and 1 % slippage, even a swap at par
+  comes within a fraction of a percent of the line, so a pair quoted a
+  little below par is refused
+  ([decisions for the owner](fee-split.md#decisions-for-the-owner)).
 - **Other pairs:** the popup asks SODAX for a quote itself, with the same call
   the SDK makes. The request carries no address, cookies or referrer. A
   minimum more than 5 % below that quote opens a full-screen warning, with
@@ -292,7 +305,7 @@ wallet or Clip Wallet.
 |---|---|---|
 | XSS or a malicious script on the app page | The app runs on its own origin with `script-src 'self'` and no inline script, and the wallet answers only that origin. The page can't reach keys, phrases, PRF outputs or the popup's storage, and it receives public data only. It can ask for a signature, but the popup decodes the request, checks it against the plan and its rules, shows its own review and needs a passkey prompt. | It can ask for a swap that pays back to the wallet at a bad minimum. Between USD stablecoins that is refused below 97 %. Elsewhere, more than 5 % under the popup's quote (or grossly under the bands) triggers a full-screen warning. A smaller shave gets through, with the decoded minimum on screen. It can ask for a same-network send to an address it chooses, but the user sees the full address and amount. It can show false balances or prices in the app. It can under-report holdings so that the popup shows the address of a wallet with no backup, though the warning stays. It can't change the deposit address the popup shows. |
 | A tampered plan or payload ("swap 10 USDC" with a payload for 10,000; extra calls; unlimited approvals) | There is no message type for messages, typed data or arbitrary transactions. The policy accepts only SODAX shapes on allowlisted contracts, decodes every byte and requires canonical encoding. It matches amounts, tokens, networks, deadline, creator and destination to the plan. Approvals are exact and go only to this trade's spender. | A bug in the policy. Review every change to `apps/wallet/src/sodax/` with care. |
-| Funds routed to an attacker (destination, hub account, fee receiver) | The destination must be the wallet's own address. The deposit target and the intent creator must be the wallet's hub account. The popup reads that account itself over Sonic's RPC, pins it on first use and shows it. The fee receiver must be on the committed allowlist, and the fee is capped at 1 %. | The first hub-account lookup trusts Sonic's RPC and TLS. |
+| Funds routed to an attacker (destination, hub account, fee receiver) | The destination must be the wallet's own address. The deposit target and the intent creator must be the wallet's hub account. The popup reads that account itself over Sonic's RPC, pins it on first use and shows it. A fee goes only where the committed allow-list lets it: at most 1 % to a listed receiver, or exactly a listed split's rates to the splitter the popup works out itself. | The first hub-account lookup trusts Sonic's RPC and TLS. A factory's entry in the allow-list is as good as its review: the build checks its `initCodeHash` against its address, but nothing reads the platform's address, rate or cap from the chain. |
 | A compromised server or database | Backups are ciphertext under the passkey's PRF output. The backup API never receives PRF outputs, phrases or passwords, and stores nothing that ties a backup to a wallet address. Every read and write needs a fresh assertion, verified against the stored public key. Stored versions are never rewritten. The server can't choose the wallet, because the app trusts only the wallet origin in its own build. | An attacker could delete backups or refuse service. A new device restores only from the server backup, so anyone without a saved phrase who then loses their device would lose the wallet. That includes users counted as backed up through a synced or a second passkey. Back up the database ([self-hosting](self-hosting.md#3-prepare-the-database)), and encourage users to save the phrase. |
 | A setting that points the app at another "wallet" | The wallet origin is fixed in each build from `exclip.config.ts`, and the server's answers can only switch the wallet off. The server verifies WebAuthn against the configured wallet origin and host. | Changing the origin takes a config change and a rebuild. Review both like code. |
 | A compromised deploy of the wallet origin (malicious JavaScript served there) | Build the wallet in CI from a reviewed commit. Require code-owner review for the wallet, its libraries and the lockfile. Serve only the built files, with no CDN or third-party scripts (the CSP has `script-src 'self'`). Compare what the host serves with the build. | **Total.** Code on the wallet origin can use the passkey's PRF and drain every user who signs in. This is the trust anchor, and the release controls below exist to protect it. |

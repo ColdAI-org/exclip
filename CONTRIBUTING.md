@@ -119,16 +119,37 @@ Some files decide where money can go or what the wallet will sign. A pull
 request that touches them needs a maintainer who checks the change line by
 line, and it should say in its description why the change is needed.
 
-- **`apps/wallet/fee-receivers.json`** lists the only addresses that may
-  receive a partner fee. An empty list means the popup refuses every swap
-  that carries a fee. That is the default, and it fails closed. Change it only
-  through a reviewed commit, never at deploy time. Say who controls each
-  address you add. The reviewer confirms the address through a channel other
-  than the pull request.
+- **`apps/wallet/fee-receivers.json`** decides where a partner fee may go.
+  It has three lists, and each ships empty, so the popup refuses every swap
+  that carries a fee. That is the default, and it fails closed. Change it
+  only through a reviewed commit, never at deploy time, and update the test
+  that pins it in the same commit ([fees](docs/fees.md#turn-a-fee-on)).
+  - **`receivers`**, for a plain fee: say who controls each address you
+    add. The reviewer confirms the address through a channel other than the
+    pull request.
+  - **`factories`**, for a fee split: the reviewer reads the factory's
+    `platform()`, `platformRate()`, `maxTotalRate()` and `initCodeHash()`
+    from the chain and compares them with the entry
+    ([deploy to Sonic](contracts/fee-split/README.md#deploy-to-sonic)). They
+    also check that the factory's source, and its implementation's, is
+    verified on the explorer and is `contracts/fee-split`'s.
+  - **`splits`**: say who controls the operator's address. The reviewer
+    confirms it through a channel other than the pull request, as for a
+    receiver.
 - **`apps/wallet/src/`**: the popup, its signing policy and price checks.
   Changes must keep the protections described in
   [docs/embedded-wallet.md](docs/embedded-wallet.md). Tightening a limit
   needs no discussion. Loosening one needs an issue and agreement first.
+  The fee split's limits were decided by the owner on 2 November 2026 in
+  place of an issue: the wallet's 1 % cap holds the operator's rate in a
+  split, and a split's total may reach its factory's listed cap
+  ([the owner's decisions](docs/fee-split.md#the-owners-decisions)).
+- **The fee split's code**: the contracts in `contracts/fee-split`, which
+  hold the fee; `packages/config/src/fee-split.ts`, which works out where a
+  split's fee goes and checks the allow-list; and
+  `packages/config/src/fee-rates.ts`, which works out how much it is. A
+  change to the contracts comes with new vectors, and CI checks the
+  TypeScript against them ([fee split](docs/fee-split.md#the-splitters-address)).
 - **The message protocol.** `apps/wallet/src/protocol.ts` and
   `apps/web/src/lib/wallet-protocol.ts` must stay byte-for-byte identical.
   A test fails if they differ. Change both in the same commit.
