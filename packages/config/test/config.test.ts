@@ -333,13 +333,12 @@ test("the example's commented split is valid once uncommented, with its factory 
   const module = `export default { ${block.replace(/^ *\/\/ {3}/gm, "")} };`;
   const { default: fees } = (await import(`data:text/javascript,${encodeURIComponent(module)}`)) as { default: ExclipConfigInput["fees"] };
   assert.equal(resolveConfig({ fees }, {}, ALLOW_LIST).config.fees.split?.splitter, "0x92F0B9beff17B0fa1BE01EC0b2FbC013554057Fe");
-  assert.match(problemsOf({ fees }).join("\n"), /is not listed/, "the repository's allow-list lists no factory");
+  assert.match(problemsOf({ fees }).join("\n"), /is not listed/, "refused without its factory listed");
 });
 
 test("the config check reads the allow-list at the root: a split needs its factory there, and a broken file stops it", async () => {
-  // The repository's own: nothing listed.
-  assert.deepEqual(readFeeAllowList(), EMPTY_FEE_ALLOW_LIST);
-  assert.deepEqual(readFeeAllowList(findRepoRoot()), parseFeeAllowList(readFileSync(join(findRepoRoot(), FEE_ALLOW_LIST_FILE), "utf8")));
+  // By default, the repository's own. Only apps/wallet/test/build-config.test.ts pins what it lists.
+  assert.deepEqual(readFeeAllowList(), parseFeeAllowList(readFileSync(join(findRepoRoot(), FEE_ALLOW_LIST_FILE), "utf8")));
 
   const dir = configDir(`export default { fees: { split: ${JSON.stringify(SPLIT)} } };\n`);
   await assert.rejects(loadExclipConfig({}, dir), (e: unknown) => e instanceof ConfigError && /is not listed/.test(e.problems.join()));

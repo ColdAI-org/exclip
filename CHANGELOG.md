@@ -170,3 +170,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - In the light theme, input focus borders are drawn in `accentInk`, like the
   focus ring. ExClip's cyan accent was 2.39:1 against white, below the 3:1
   a focus indicator needs; the ink is 4.87:1. The dark theme is unchanged.
+- Listing a fee receiver, a factory or a split in
+  `apps/wallet/fee-receivers.json` needs only the test change the
+  documentation names, in `apps/wallet/test/build-config.test.ts`. A test in
+  `packages/config` used to expect the list to be empty too, and failed in a
+  copy that lists one.

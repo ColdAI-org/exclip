@@ -73,7 +73,8 @@ test("the wallet gets each listed split with its factory's values and the platfo
 
 test("the repository ships an empty fee allowlist, so the wallet signs only fee-free intents", () => {
   // A deployment that charges a fee adds its receiver, or its fee-split factory and split, to fee-receivers.json in a
-  // reviewed commit and updates this test in the same commit (docs/embedded-wallet.md, docs/fee-split.md).
+  // reviewed commit and updates this test in the same commit (docs/fees.md, CONTRIBUTING.md). No other test pins what
+  // the file lists.
   assert.deepEqual(parseFeeAllowList(readFileSync(FEE_RECEIVERS_FILE, "utf8")), { receivers: [], factories: [], splits: [] });
 });
 
