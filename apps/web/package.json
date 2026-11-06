@@ -16,7 +16,7 @@
     "@sodax/dapp-kit": "2.2.0",
     "@sodax/sdk": "2.2.0",
     "@sodax/wallet-sdk-react": "2.2.0",
-    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-query": "^5.105.3",
     "buffer": "6.0.3",
     "lucide-react": "^0.545.0",
     "react": "catalog:",
